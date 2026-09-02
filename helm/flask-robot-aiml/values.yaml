@@ -26,3 +26,12 @@ volumes:
   gpio: true
   i2c: true
   mem: true
+# Add this section if it doesn't exist
+securityContext:
+  privileged: true
+
+# Or add specific capabilities
+capabilities:
+  add:
+  - SYS_ADMIN
+  - IPC_LOCK

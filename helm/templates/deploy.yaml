@@ -32,7 +32,7 @@ spec:
             - name: ENVIRONMENT
               value: {{ .Values.environment | default "staging" }}
             - name: PIGPIO_ADDR
-              value: {{ .Values.env.PIGPIO_ADDR | default "10.103.216.235" }}
+              value: {{ .Values.env.PIGPIO_ADDR | default "10.226.22.234" }}
             - name: PIGPIO_PORT
               value: {{ .Values.env.PIGPIO_PORT | default "8889" | quote }}
           resources:

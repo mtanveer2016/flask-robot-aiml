@@ -21,7 +21,7 @@ spec:
         - containerPort: 5002
         env:
         - name: PIGPIO_ADDR
-          value: "10.103.216.235"   # Your Pi's IP address
+          value: "10.226.22.234"   # Your Pi's IP address
         - name: PIGPIO_PORT
           value: "8889"
         securityContext:

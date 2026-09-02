@@ -94,12 +94,19 @@ set -e
 #
 # Note: Starting the service requires appropriate privileges to manage system services.
 #
+# Installing docker-sbx
+#
+# Set the SBX environment variable to "1" to also install the docker-sbx
+# package alongside the regular Docker Engine packages:
+#
+#   $ curl -fsSL https://get.docker.com | sudo SBX=1 sh
+#
 # ==============================================================================
 
 
 # Git commit from https://github.com/docker/docker-install when
 # the script was uploaded (Should only be modified by upload job):
-SCRIPT_COMMIT_SHA="2687d91ddeb3bd6aeae37a90947761efdee87030"
+SCRIPT_COMMIT_SHA="42dcae692436f34526524ed46d3b32885c9355f5"
 
 # strip "v" prefix if present
 VERSION="${VERSION#v}"
@@ -131,6 +138,18 @@ mirror=''
 DRY_RUN=${DRY_RUN:-}
 REPO_ONLY=${REPO_ONLY:-0}
 NO_AUTOSTART=${NO_AUTOSTART:-0}
+SBX=${SBX:-0}
+
+# Provide a helpful usage statement when --help or any invalid argument is passed
+# to the script. Exit code deliberately not included here as error depends on
+# argument provided.
+usage() {
+	echo
+	echo "USAGE: "
+	echo "    ${0} [--channel <stable|test>] [--mirror <Aliyun|AzureChinaCloud>] [--version <VERSION>] [--setup-repo] [--no-autostart] [--dry-run] [--help]"
+	echo
+}
+
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--channel)
@@ -155,8 +174,14 @@ while [ $# -gt 0 ]; do
 		--no-autostart)
 			NO_AUTOSTART=1
 			;;
+		--help)
+			usage
+			exit 0
+			;;
 		--*)
 			echo "Illegal option $1"
+			usage
+			exit 1
 			;;
 	esac
 	shift $(( $# > 0 ? 1 : 0 ))
@@ -290,6 +315,12 @@ get_distribution() {
 	if [ -r /etc/os-release ]; then
 		lsb_dist="$(. /etc/os-release && echo "$ID")"
 	fi
+
+	# Normalize Fedora Asahi Remix to fedora
+	if [ "$lsb_dist" = "fedora-asahi-remix" ]; then
+		lsb_dist="fedora"
+	fi
+
 	# Returning an empty string here should be alright since the
 	# case statements don't act unless you provide an actual value
 	echo "$lsb_dist"
@@ -543,11 +574,11 @@ do_install() {
 		ubuntu.focal|ubuntu.bionic|ubuntu.xenial|ubuntu.trusty)
 			deprecation_notice "$lsb_dist" "$dist_version"
 			;;
-		ubuntu.oracular|ubuntu.mantic|ubuntu.lunar|ubuntu.kinetic|ubuntu.impish|ubuntu.hirsute|ubuntu.groovy|ubuntu.eoan|ubuntu.disco|ubuntu.cosmic)
+		ubuntu.questing|ubuntu.oracular|ubuntu.mantic|ubuntu.lunar|ubuntu.kinetic|ubuntu.impish|ubuntu.hirsute|ubuntu.groovy|ubuntu.eoan|ubuntu.disco|ubuntu.cosmic)
 			deprecation_notice "$lsb_dist" "$dist_version"
 			;;
 		fedora.*)
-			if [ "$dist_version" -lt 41 ]; then
+			if [ "$dist_version" -lt 43 ]; then
 				deprecation_notice "$lsb_dist" "$dist_version"
 			fi
 			;;
@@ -557,7 +588,12 @@ do_install() {
 	case "$lsb_dist" in
 		ubuntu|debian|raspbian)
 			pre_reqs="ca-certificates curl"
-			apt_repo="deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] $DOWNLOAD_URL/linux/$lsb_dist $dist_version $CHANNEL"
+			apt_repo_lsb_dist="$lsb_dist"
+			# Docker does not publish a Raspbian Trixie repo; use Debian Trixie instead.
+			if [ "$lsb_dist" = "raspbian" ] && [ "$dist_version" = "trixie" ]; then
+				apt_repo_lsb_dist="debian"
+			fi
+			apt_repo="deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] $DOWNLOAD_URL/linux/$apt_repo_lsb_dist $dist_version $CHANNEL"
 			(
 				if ! is_dry_run; then
 					set -x
@@ -565,7 +601,7 @@ do_install() {
 				$sh_c 'apt-get -qq update >/dev/null'
 				$sh_c "DEBIAN_FRONTEND=noninteractive apt-get -y -qq install $pre_reqs >/dev/null"
 				$sh_c 'install -m 0755 -d /etc/apt/keyrings'
-				$sh_c "curl -fsSL \"$DOWNLOAD_URL/linux/$lsb_dist/gpg\" -o /etc/apt/keyrings/docker.asc"
+				$sh_c "curl -fsSL \"$DOWNLOAD_URL/linux/$apt_repo_lsb_dist/gpg\" -o /etc/apt/keyrings/docker.asc"
 				$sh_c "chmod a+r /etc/apt/keyrings/docker.asc"
 				$sh_c "echo \"$apt_repo\" > /etc/apt/sources.list.d/docker.list"
 				$sh_c 'apt-get -qq update >/dev/null'
@@ -576,6 +612,7 @@ do_install() {
 			fi
 
 			pkg_version=""
+			cli_pkg_version=""
 			if [ -n "$VERSION" ]; then
 				if is_dry_run; then
 					echo "# WARNING: VERSION pinning is not supported in DRY_RUN"
@@ -583,42 +620,53 @@ do_install() {
 					# Will work for incomplete versions IE (17.12), but may not actually grab the "latest" if in the test channel
 					pkg_pattern="$(echo "$VERSION" | sed 's/-ce-/~ce~.*/g' | sed 's/-/.*/g')"
 					search_command="apt-cache madison docker-ce | grep '$pkg_pattern' | head -1 | awk '{\$1=\$1};1' | cut -d' ' -f 3"
-					pkg_version="$($sh_c "$search_command")"
 					echo "INFO: Searching repository for VERSION '$VERSION'"
 					echo "INFO: $search_command"
+					pkg_version="$($sh_c "$search_command")"
 					if [ -z "$pkg_version" ]; then
 						echo
 						echo "ERROR: '$VERSION' not found amongst apt-cache madison results"
 						echo
 						exit 1
 					fi
-					if version_gte "18.09"; then
-							search_command="apt-cache madison docker-ce-cli | grep '$pkg_pattern' | head -1 | awk '{\$1=\$1};1' | cut -d' ' -f 3"
-							echo "INFO: $search_command"
-							cli_pkg_version="=$($sh_c "$search_command")"
-					fi
 					pkg_version="=$pkg_version"
+
+					if version_gte "18.09"; then
+						search_command="apt-cache madison docker-ce-cli | grep '$pkg_pattern' | head -1 | awk '{\$1=\$1};1' | cut -d' ' -f 3"
+						echo "INFO: $search_command"
+						cli_pkg_version="$($sh_c "$search_command")"
+						if [ -n "$cli_pkg_version" ]; then
+							cli_pkg_version="=$cli_pkg_version"
+						fi
+					fi
 				fi
 			fi
 			(
-				pkgs="docker-ce${pkg_version%=}"
+				pkgs="docker-ce${pkg_version}"
 				if version_gte "18.09"; then
-						# older versions didn't ship the cli and containerd as separate packages
-						pkgs="$pkgs docker-ce-cli${cli_pkg_version%=} containerd.io"
+					# older versions didn't ship the cli and containerd as separate packages
+					pkgs="$pkgs docker-ce-cli${cli_pkg_version} containerd.io"
 				fi
 				if version_gte "20.10"; then
-						pkgs="$pkgs docker-compose-plugin docker-ce-rootless-extras$pkg_version"
+					pkgs="$pkgs docker-compose-plugin docker-ce-rootless-extras$pkg_version"
 				fi
 				if version_gte "23.0"; then
-						pkgs="$pkgs docker-buildx-plugin"
+					pkgs="$pkgs docker-buildx-plugin"
 				fi
 				if version_gte "28.2"; then
-						pkgs="$pkgs docker-model-plugin"
+					pkgs="$pkgs docker-model-plugin"
+				fi
+				if [ "$SBX" = "1" ]; then
+					pkgs="$pkgs docker-sbx"
 				fi
 				if ! is_dry_run; then
 					set -x
 				fi
-				$sh_c "DEBIAN_FRONTEND=noninteractive apt-get -y -qq install $pkgs >/dev/null"
+				apt_flags="-y -qq"
+				if [ -n "$pkg_version" ]; then
+					apt_flags="$apt_flags --allow-downgrades"
+				fi
+				$sh_c "DEBIAN_FRONTEND=noninteractive apt-get $apt_flags install $pkgs >/dev/null"
 			)
 			if [ "$NO_AUTOSTART" != "1" ]; then
 				start_docker_daemon
@@ -627,10 +675,6 @@ do_install() {
 			exit 0
 			;;
 		centos|fedora|rhel|rocky)
-			if [ "$(uname -m)" = "s390x" ]; then
-				echo "Effective v27.5, please consult RHEL distro statement for s390x support."
-				exit 1
-			fi
 			repo_file_url="$DOWNLOAD_URL/linux/$lsb_dist/$REPO_FILE"
 			(
 				if ! is_dry_run; then
@@ -673,6 +717,7 @@ do_install() {
 			fi
 
 			pkg_version=""
+			cli_pkg_version=""
 			if command_exists dnf; then
 				pkg_manager="dnf"
 				pkg_manager_flags="-y -q --best"
@@ -691,22 +736,23 @@ do_install() {
 					fi
 					pkg_pattern="$(echo "$VERSION" | sed 's/-ce-/\\\\.ce.*/g' | sed 's/-/.*/g').*$pkg_suffix"
 					search_command="$pkg_manager list --showduplicates docker-ce | grep '$pkg_pattern' | tail -1 | awk '{print \$2}'"
-					pkg_version="$($sh_c "$search_command")"
 					echo "INFO: Searching repository for VERSION '$VERSION'"
 					echo "INFO: $search_command"
+					pkg_version="$($sh_c "$search_command")"
 					if [ -z "$pkg_version" ]; then
 						echo
 						echo "ERROR: '$VERSION' not found amongst $pkg_manager list results"
 						echo
 						exit 1
 					fi
+					# Cut out the epoch and prefix with a '-'
+					pkg_version="-$(echo "$pkg_version" | cut -d':' -f 2)"
+
 					if version_gte "18.09"; then
 						# older versions don't support a cli package
 						search_command="$pkg_manager list --showduplicates docker-ce-cli | grep '$pkg_pattern' | tail -1 | awk '{print \$2}'"
 						cli_pkg_version="$($sh_c "$search_command" | cut -d':' -f 2)"
 					fi
-					# Cut out the epoch and prefix with a '-'
-					pkg_version="-$(echo "$pkg_version" | cut -d':' -f 2)"
 				fi
 			fi
 			(
@@ -724,6 +770,9 @@ do_install() {
 				fi
 				if version_gte "23.0"; then
 						pkgs="$pkgs docker-buildx-plugin docker-model-plugin"
+				fi
+				if [ "$SBX" = "1" ]; then
+					pkgs="$pkgs docker-sbx"
 				fi
 				if ! is_dry_run; then
 					set -x

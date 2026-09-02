@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: 82mtanveer/myrepo
-  tag: flask-robot-aiml
+  tag: flask-robot-arm64-final
   pullPolicy: IfNotPresent
 
 service:

@@ -14,15 +14,28 @@ spec:
       labels:
         app: flask-robot-aiml
     spec:
+      securityContext:
+        runAsUser: 0  # Run as root
+        runAsGroup: 0
       containers:
       - name: flask-robot-aiml
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
         - containerPort: {{ .Values.service.port }}
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+            - SYS_ADMIN
+            - IPC_LOCK
         env:
         - name: ENVIRONMENT
           value: "{{ .Values.env.ENVIRONMENT }}"
+        - name: LG_ADDR
+          value: "{{ .Values.env.LG_ADDR | default "localhost" }}"
+        - name: LG_PORT
+          value: "{{ .Values.env.LG_PORT | default "8889" }}"
         resources:
           requests:
             memory: "{{ .Values.resources.requests.memory }}"
@@ -41,9 +54,12 @@ spec:
       - name: dev-gpiomem
         hostPath:
           path: /dev/gpiomem
+          type: CharDevice
       - name: dev-i2c
         hostPath:
           path: /dev/i2c-1
+          type: CharDevice
       - name: dev-mem
         hostPath:
           path: /dev/mem
+          type: CharDevice

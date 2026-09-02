@@ -20,7 +20,7 @@ resources:
 
 env:
   ENVIRONMENT: "staging"
-  GROQ_API_KEY: ""  # Will be set via Kubernetes secret
+#  GROQ_API_KEY: ""  # Will be set via Kubernetes secret
 
 volumes:
   gpio: true

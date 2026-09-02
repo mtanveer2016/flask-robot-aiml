@@ -1,0 +1,35 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+# Virtual environments
+venv/
+env/
+.venv/
+# Environment variables (contains API keys!)
+.env
+.env.local
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+# Logs
+*.log
+logs/
+# Docker files
+*.db
+*.sqlite3
+# Kubernetes secrets
+*.secret.yaml
+secrets/
+# OS files
+.DS_Store
+Thumbs.db
+# Temporary files
+tmp/
+temp/
+*.tmp
+

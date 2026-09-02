@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>LED Dance Party - Robot Car</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: white;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .subtitle {
+            text-align: center;
+            margin-bottom: 30px;
+            opacity: 0.9;
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px 0 rgba(31,38,135,0.37);
+            border: 1px solid rgba(255,255,255,0.18);
+        }
+        
+        .card h2 {
+            margin-bottom: 15px;
+            font-size: 1.3em;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            padding-bottom: 10px;
+        }
+        
+        .pattern-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .pattern-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        .pattern-btn:hover {
+            background: rgba(255,255,255,0.4);
+            transform: translateY(-2px);
+        }
+        
+        .pattern-btn.active {
+            background: #4CAF50;
+            box-shadow: 0 0 20px rgba(76,175,80,0.5);
+        }
+        
+        .control-group {
+            margin-bottom: 20px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            padding: 5px;
+        }
+        
+        .value-display {
+            display: inline-block;
+            margin-left: 10px;
+            background: rgba(0,0,0,0.5);
+            padding: 2px 8px;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: transform 0.2s;
+            width: 100%;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            transform: scale(1.02);
+        }
+        
+        button.danger {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        button.success {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+            margin-right: 8px;
+        }
+        
+        .status-indicator.active {
+            background-color: #4CAF50;
+            box-shadow: 0 0 10px #4CAF50;
+        }
+        
+        .status-indicator.inactive {
+            background-color: #f44336;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        
+        .visualizer {
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .led-preview {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .led-dot {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #333;
+            transition: all 0.05s ease;
+        }
+        
+        .bpm-slider {
+            width: 100%;
+        }
+        
+        .bpm-value {
+            text-align: center;
+            font-size: 2em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        @media (max-width: 768px) {
+            .pattern-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            button {
+                padding: 10px 20px;
+            }
+        }
+        
+        .preset-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 LED Dance Party 🕺</h1>
+        <div class="subtitle">Synchronized light patterns for your robot car</div>
+        
+        <div class="dashboard">
+            <!-- Pattern Selection Card -->
+            <div class="card">
+                <h2>🎨 Dance Patterns</h2>
+                <div class="pattern-grid" id="patternGrid">
+                    <!-- Patterns will be loaded dynamically -->
+                </div>
+                
+                <div class="preset-buttons">
+                    <button class="success" onclick="startPartyMode()">🎉 Party Mode (30s)</button>
+                    <button onclick="stopDance()" class="danger">⏹️ Stop Dance</button>
+                </div>
+            </div>
+            
+            <!-- Controls Card -->
+            <div class="card">
+                <h2>🎮 Controls</h2>
+                
+                <div class="control-group">
+                    <label>🎵 BPM (Beats Per Minute)</label>
+                    <input type="range" id="bpmSlider" min="40" max="200" value="120" step="1">
+                    <div class="bpm-value">
+                        <span id="bpmValue">120</span> BPM
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label>💡 Brightness</label>
+                    <input type="range" id="brightnessSlider" min="0" max="255" value="255" step="5">
+                    <span id="brightnessValue" class="value-display">255</span>
+                </div>
+                
+                <div class="control-group">
+                    <label>⏱️ Duration (seconds)</label>
+                    <input type="number" id="durationInput" placeholder="Leave empty for infinite" step="10" min="0">
+                </div>
+                
+                <button onclick="applySettings()">Apply Settings</button>
+            </div>
+            
+            <!-- Status Card -->
+            <div class="card">
+                <h2>📊 Status</h2>
+                <div style="margin-bottom: 10px;">
+                    <span id="statusIndicator" class="status-indicator inactive"></span>
+                    <span id="statusText">Inactive</span>
+                </div>
+                <div id="patternStatus">Current Pattern: None</div>
+                <div id="bpmStatus">BPM: 120</div>
+                <div id="brightnessStatus">Brightness: 255</div>
+                
+                <div class="visualizer">
+                    <h3>🎬 Live Visualizer</h3>
+                    <div class="led-preview">
+                        <div class="led-dot" id="ledPreview"></div>
+                    </div>
+                    <small>Your LED will pulse with the beat!</small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Music Sync Card -->
+        <div class="card">
+            <h2>🎤 Beat Sync (Experimental)</h2>
+            <p>Tap the button to simulate beat detection, or use with actual music input</p>
+            <button onclick="simulateBeat()">🥁 Tap Beat</button>
+            <button onclick="startBeatDetection()">🎧 Start Beat Detection</button>
+            <div style="margin-top: 10px; font-size: 0.9em; opacity: 0.8;">
+                💡 Tip: For best results, combine with music playing near the robot's microphone
+            </div>
+                <h2>🎤 Real Beat Detection</h2>
+    <p>Enable microphone to sync lights with music!</p>
+    
+    <button id="enableMicrophoneBtn" onclick="enableMicrophone()">🎙️ Enable Microphone</button>
+    <button id="disableMicrophoneBtn" onclick="disableMicrophone()" style="display:none;">⏹️ Disable Microphone</button>
+    
+    <div id="micStatus" style="margin-top: 10px; font-size: 0.9em;"></div>
+    
+    <!-- Beat visualizer -->
+    <canvas id="beatVisualizer" width="300" height="60" style="margin-top: 15px; width: 100%; background: #000; border-radius: 5px;"></canvas>
+    
+    <div style="margin-top: 10px;">
+        <label>🎛️ Sensitivity: </label>
+        <input type="range" id="sensitivitySlider" min="1" max="100" value="30">
+        <span id="sensitivityValue">30</span>
+        </div>
+    </div>
+    
+    <script>
+        let currentPattern = null;
+        let statusCheckInterval = null;
+        let beatDetectionActive = false;
+        
+        // Load available patterns on page load
+        async function loadPatterns() {
+            try {
+                const response = await fetch('/api/led/dance/patterns');
+                const data = await response.json();
+                
+                const patternGrid = document.getElementById('patternGrid');
+                patternGrid.innerHTML = '';
+                
+                data.patterns.forEach(pattern => {
+                    const btn = document.createElement('button');
+                    btn.className = 'pattern-btn';
+                    btn.textContent = pattern.name;
+                    btn.onclick = () => startPattern(pattern.id);
+                    patternGrid.appendChild(btn);
+                });
+            } catch (error) {
+                console.error('Error loading patterns:', error);
+            }
+        }
+        
+        // Start a specific dance pattern
+        async function startPattern(pattern) {
+            currentPattern = pattern;
+            
+            const duration = document.getElementById('durationInput').value;
+            const durationValue = duration ? parseInt(duration) : null;
+            
+            const bpm = parseInt(document.getElementById('bpmSlider').value);
+            
+            try {
+                const response = await fetch('/api/led/dance/start', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        pattern: pattern,
+                        bpm: bpm,
+                        duration: durationValue
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    updateUIForActivePattern(pattern, bpm);
+                }
+            } catch (error) {
+                console.error('Error starting pattern:', error);
+                alert('Failed to start dance pattern');
+            }
+        }
+        
+        // Stop dancing
+        async function stopDance() {
+            try {
+                const response = await fetch('/api/led/dance/stop', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    updateUIForInactive();
+                }
+            } catch (error) {
+                console.error('Error stopping dance:', error);
+            }
+        }
+        
+        // Apply settings (BPM, brightness)
+        async function applySettings() {
+            const bpm = parseInt(document.getElementById('bpmSlider').value);
+            const brightness = parseInt(document.getElementById('brightnessSlider').value);
+            
+            try {
+                // Update BPM
+                await fetch(`/api/led/dance/bpm/${bpm}`, {method: 'POST'});
+                
+                // Update Brightness
+                await fetch(`/api/led/dance/brightness/${brightness}`, {method: 'POST'});
+                
+                // If dancing, restart with new settings
+                if (currentPattern) {
+                    await startPattern(currentPattern);
+                }
+                
+                alert('Settings applied successfully!');
+            } catch (error) {
+                console.error('Error applying settings:', error);
+            }
+        }
+        
+        // Party mode - cycle through patterns
+        async function startPartyMode() {
+            const patterns = ['rainbow', 'strobe', 'disco', 'random'];
+            let index = 0;
+            
+            const partyInterval = setInterval(async () => {
+                if (index >= patterns.length) {
+                    clearInterval(partyInterval);
+                    setTimeout(() => stopDance(), 5000);
+                    return;
+                }
+                
+                await startPattern(patterns[index]);
+                index++;
+            }, 8000); // Change pattern every 8 seconds
+        }
+        
+        // Simulate a beat (for testing)
+        async function simulateBeat() {
+            try {
+                await fetch('/api/led/dance/sync-to-beats', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({beat: true})
+                });
+                
+                // Visual feedback
+                const preview = document.getElementById('ledPreview');
+                preview.style.backgroundColor = 'white';
+                setTimeout(() => {
+                    preview.style.backgroundColor = '#333';
+                }, 100);
+            } catch (error) {
+                console.error('Error simulating beat:', error);
+            }
+        }
+        
+        // Start automatic beat detection (simulates microphone input)
+        function startBeatDetection() {
+            if (beatDetectionActive) {
+                alert('Beat detection already active');
+                return;
+            }
+            
+            beatDetectionActive = true;
+            alert('Beat detection started! Tap your desk or clap near the robot');
+            
+            // Simulate simple beat detection (you can replace with actual microphone input)
+            const beatInterval = setInterval(async () => {
+                if (!beatDetectionActive) {
+                    clearInterval(beatInterval);
+                    return;
+                }
+                
+                // Random beat simulation (for demo)
+                // In production, replace with actual audio input from microphone
+                if (Math.random() < 0.3) {
+                    await simulateBeat();
+                }
+            }, 500);
+        }
+        
+        // Update UI for active pattern
+        function updateUIForActivePattern(pattern, bpm) {
+            document.getElementById('statusIndicator').className = 'status-indicator active';
+            document.getElementById('statusText').textContent = 'Dancing!';
+            document.getElementById('patternStatus').innerHTML = `Current Pattern: <strong>${pattern}</strong>`;
+            
+            // Highlight active pattern button
+            document.querySelectorAll('.pattern-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.toLowerCase() === pattern) {
+                    btn.classList.add('active');
+                }
+            });
+        }
+        
+        // Update UI for inactive state
+        function updateUIForInactive() {
+            currentPattern = null;
+            document.getElementById('statusIndicator').className = 'status-indicator inactive';
+            document.getElementById('statusText').textContent = 'Inactive';
+            document.getElementById('patternStatus').innerHTML = 'Current Pattern: None';
+            
+            document.querySelectorAll('.pattern-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+        }
+        
+        // Check status periodically
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/led/dance/status');
+                const data = await response.json();
+                
+                if (data.is_dancing) {
+                    updateUIForActivePattern(data.current_pattern, data.bpm);
+                } else if (currentPattern) {
+                    updateUIForInactive();
+                }
+                
+                // Update slider values
+                document.getElementById('bpmSlider').value = data.bpm;
+                document.getElementById('bpmValue').textContent = data.bpm;
+                document.getElementById('brightnessSlider').value = data.brightness;
+                document.getElementById('brightnessValue').textContent = data.brightness;
+                
+            } catch (error) {
+                console.error('Error checking status:', error);
+            }
+        }
+        
+        // Event listeners
+        document.getElementById('bpmSlider').addEventListener('input', (e) => {
+            document.getElementById('bpmValue').textContent = e.target.value;
+        });
+        
+        document.getElementById('brightnessSlider').addEventListener('input', (e) => {
+            document.getElementById('brightnessValue').textContent = e.target.value;
+        });
+        
+        // Animation for LED preview
+        function animateLEDPreview() {
+            setInterval(async () => {
+                if (currentPattern) {
+                    try {
+                        const response = await fetch('/api/led/dance/status');
+                        const data = await response.json();
+                        if (data.is_dancing) {
+                            const preview = document.getElementById('ledPreview');
+                            const brightness = data.brightness;
+                            preview.style.backgroundColor = `rgb(${brightness}, ${brightness}, ${brightness})`;
+                            setTimeout(() => {
+                                preview.style.backgroundColor = '#333';
+                            }, 50);
+                        }
+                    } catch (error) {
+                        // Silent fail
+                    }
+                }
+            }, 500);
+        }
+        
+        // Initialize everything
+        async function init() {
+            await loadPatterns();
+            await checkStatus();
+            statusCheckInterval = setInterval(checkStatus, 2000);
+            animateLEDPreview();
+        }
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+        });
+        
+        // Start the app
+        init();
+        
+            let audioContext = null;
+    let mediaStream = null;
+    let sourceNode = null;
+    let analyserNode = null;
+    let animationFrame = null;
+    let isMicrophoneActive = false;
+    let lastBeatTime = 0;
+    let beatCooldown = 250; // ms between beats
+    let sensitivity = 30;
+    
+    // Enable microphone and start beat detection
+    async function enableMicrophone() {
+        try {
+            // Request microphone access
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaStream = stream;
+            
+            // Create audio context
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            sourceNode = audioContext.createMediaStreamSource(stream);
+            analyserNode = audioContext.createAnalyser();
+            
+            // Configure analyser
+            analyserNode.fftSize = 256;
+            analyserNode.smoothingTimeConstant = 0.3;
+            
+            // Connect nodes
+            sourceNode.connect(analyserNode);
+            
+            // Start audio context (required after user interaction)
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+            
+            isMicrophoneActive = true;
+            
+            // Update UI
+            document.getElementById('enableMicrophoneBtn').style.display = 'none';
+            document.getElementById('disableMicrophoneBtn').style.display = 'inline-block';
+            document.getElementById('micStatus').innerHTML = '✅ Microphone active - detecting beats!';
+            document.getElementById('micStatus').style.color = '#4CAF50';
+            
+            // Start beat detection loop
+            startBeatDetection();
+            
+        } catch (error) {
+            console.error('Error accessing microphone:', error);
+            document.getElementById('micStatus').innerHTML = '❌ Cannot access microphone. Please check permissions.';
+            document.getElementById('micStatus').style.color = '#f44336';
+        }
+    }
+    
+    // Disable microphone
+    function disableMicrophone() {
+        if (animationFrame) {
+            cancelAnimationFrame(animationFrame);
+        }
+        
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+        }
+        
+        if (audioContext) {
+            audioContext.close();
+        }
+        
+        isMicrophoneActive = false;
+        
+        // Update UI
+        document.getElementById('enableMicrophoneBtn').style.display = 'inline-block';
+        document.getElementById('disableMicrophoneBtn').style.display = 'none';
+        document.getElementById('micStatus').innerHTML = '⏹️ Microphone disabled';
+        document.getElementById('micStatus').style.color = '#ff9800';
+    }
+    
+    // Start beat detection loop
+    function startBeatDetection() {
+        const bufferLength = analyserNode.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        
+        let energyHistory = [];
+        const historySize = 43; // About 1 second at 43 FPS (60 FPS = ~0.7 seconds)
+        
+        function detectBeat() {
+            if (!isMicroactive) return;
+            
+            // Get current frequency data
+            analyserNode.getByteFrequencyData(dataArray);
+            
+            // Calculate average energy (volume)
+            let sum = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                sum += dataArray[i];
+            }
+            let currentEnergy = sum / bufferLength;
+            
+            // Add to history
+            energyHistory.push(currentEnergy);
+            if (energyHistory.length > historySize) {
+                energyHistory.shift();
+            }
+            
+            // Calculate average energy from history
+            let avgEnergy = 0;
+            for (let i = 0; i < energyHistory.length; i++) {
+                avgEnergy += energyHistory[i];
+            }
+            avgEnergy /= energyHistory.length;
+            
+            // Calculate variance (how much energy changes)
+            let variance = 0;
+            for (let i = 0; i < energyHistory.length; i++) {
+                variance += Math.pow(energyHistory[i] - avgEnergy, 2);
+            }
+            variance /= energyHistory.length;
+            
+            // Dynamic threshold based on sensitivity
+            const threshold = avgEnergy + (variance * (sensitivity / 100));
+            
+            // Beat detection!
+            const now = Date.now();
+            if (currentEnergy > threshold && (now - lastBeatTime) > beatCooldown) {
+                // BEAT DETECTED!
+                lastBeatTime = now;
+                sendBeatToLED();
+                
+                // Visual feedback on canvas
+                drawBeatVisualizer(true);
+            } else {
+                drawBeatVisualizer(false);
+            }
+            
+            // Update energy meter
+            drawEnergyMeter(currentEnergy, threshold);
+            
+            // Continue loop
+            if (isMicrophoneActive) {
+                animationFrame = requestAnimationFrame(detectBeat);
+            }
+        }
+        
+        detectBeat();
+    }
+    
+    // Send beat to LED
+    async function sendBeatToLED() {
+        try {
+            await fetch('/api/led/dance/sync-to-beats', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({beat: true})
+            });
+        } catch (error) {
+            console.error('Error sending beat:', error);
+        }
+    }
+    
+    // Draw beat visualizer
+    function drawBeatVisualizer(isBeat) {
+        const canvas = document.getElementById('beatVisualizer');
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        if (isBeat) {
+            // Flash on beat
+            ctx.fillStyle = '#4CAF50';
+            ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 20px Arial';
+            ctx.fillText('BEAT!', width/2 - 35, height/2 + 8);
+            
+            // Reset after flash
+            setTimeout(() => {
+                if (document.getElementById('beatVisualizer')) {
+                    drawBeatVisualizer(false);
+                }
+            }, 100);
+        } else {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = '#666';
+            ctx.font = '12px Arial';
+            ctx.fillText('Listening for beats...', width/2 - 70, height/2 + 4);
+        }
+    }
+    
+    // Draw energy meter
+    function drawEnergyMeter(currentEnergy, threshold) {
+        const canvas = document.getElementById('beatVisualizer');
+        if (!canvas || isBeatDetected) return;
+        
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        // Clear bottom portion for meter
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, height - 20, width, 20);
+        
+        // Draw energy bar
+        const energyPercent = Math.min(1, currentEnergy / 255);
+        const energyWidth = energyPercent * width;
+        ctx.fillStyle = '#2196F3';
+        ctx.fillRect(0, height - 20, energyWidth, 15);
+        
+        // Draw threshold line
+        const thresholdPercent = Math.min(1, threshold / 255);
+        const thresholdX = thresholdPercent * width;
+        ctx.strokeStyle = '#FF9800';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(thresholdX, height - 20);
+        ctx.lineTo(thresholdX, height);
+        ctx.stroke();
+        
+        // Labels
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px Arial';
+        ctx.fillText('Energy', 5, height - 5);
+        ctx.fillStyle = '#FF9800';
+        ctx.fillText('Threshold', thresholdX - 30, height - 5);
+    }
+    
+    // Update sensitivity
+    document.getElementById('sensitivitySlider').addEventListener('input', (e) => {
+        sensitivity = parseInt(e.target.value);
+        document.getElementById('sensitivityValue').textContent = sensitivity;
+    });
+    
+    // Clean up on page unload
+    window.addEventListener('beforeunload', () => {
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+        }
+        if (audioContext) {
+            audioContext.close();
+        }
+    });
+    </script>
+</body>
+</html>
+

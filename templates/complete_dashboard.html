@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Autonomous Robot Car</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+        }
+        .card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .video-container {
+            background: black;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .video-feed {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        .mode-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .mode-btn {
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .mode-btn.active {
+            transform: scale(1.02);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .mode-manual { background: #6c5ce7; color: white; }
+        .mode-ball { background: #fd79a8; color: white; }
+        .mode-waypoint { background: #00b894; color: white; }
+        .mode-patrol { background: #e17055; color: white; }
+        .mode-hunt { background: #fdcb6e; color: #2d3436; }
+        .control-pad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            max-width: 300px;
+            margin: 0 auto;
+        }
+        .ctrl-btn {
+            width: 80px;
+            height: 80px;
+            font-size: 30px;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            transition: all 0.1s;
+        }
+        .ctrl-btn:active {
+            transform: scale(0.95);
+            background: #4CAF50;
+        }
+        .stop-btn {
+            background: #f44336;
+        }
+        .speed-slider {
+            width: 100%;
+            margin: 15px 0;
+        }
+        .status {
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+        .status-item {
+            display: inline-block;
+            margin: 5px 10px;
+        }
+        .distance-warning {
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+        .distance-safe {
+            color: #51cf66;
+        }
+        .waypoint-panel {
+            margin-top: 15px;
+        }
+        .waypoint-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .waypoint-input input {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            border-radius: 5px;
+        }
+        button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-primary { background: #4CAF50; color: white; }
+        .btn-danger { background: #f44336; color: white; }
+        .btn-warning { background: #ff9800; color: white; }
+        .waypoint-list {
+            max-height: 150px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        .waypoint-item {
+            background: rgba(255,255,255,0.1);
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            .ctrl-btn {
+                width: 60px;
+                height: 60px;
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Autonomous Robot Car</h1>
+        
+        <div class="grid">
+            <!-- Left Column -->
+            <div>
+                <!-- Video Feed -->
+                <div class="card">
+                    <h3>📹 Live Camera Feed</h3>
+                    <div class="video-container">
+                        <img src="/video_feed" class="video-feed" id="videoFeed">
+                    </div>
+                </div>
+                
+                <!-- Mode Selection -->
+                <div class="card">
+                    <h3>🎮 Operation Modes</h3>
+                    <div class="mode-buttons">
+                        <button class="mode-btn mode-manual" onclick="setMode('manual')">🎮 Manual</button>
+                        <button class="mode-btn mode-ball" onclick="setMode('ball_follow')">⚽ Ball Follow</button>
+                        <button class="mode-btn mode-waypoint" onclick="setMode('waypoint_nav')">📍 Waypoint Nav</button>
+                        <button class="mode-btn mode-patrol" onclick="setMode('patrol')">🚓 Patrol</button>
+                        <button class="mode-btn mode-hunt" onclick="setMode('ball_hunt')">🔍 Ball Hunt</button>
+                    </div>
+                    
+                    <!-- Manual Controls -->
+                    <div id="manualControls">
+                        <div class="control-pad">
+                            <div></div>
+                            <button class="ctrl-btn" onmousedown="move('forward')" onmouseup="stop()" ontouchstart="move('forward')" ontouchend="stop()">▲</button>
+                            <div></div>
+                            <button class="ctrl-btn" onmousedown="move('left')" onmouseup="stop()" ontouchstart="move('left')" ontouchend="stop()">◀</button>
+                            <button class="ctrl-btn stop-btn" onclick="stop()">■</button>
+                            <button class="ctrl-btn" onmousedown="move('right')" onmouseup="stop()" ontouchstart="move('right')" ontouchend="stop()">▶</button>
+                            <div></div>
+                            <button class="ctrl-btn" onmousedown="move('backward')" onmouseup="stop()" ontouchstart="move('backward')" ontouchend="stop()">▼</button>
+                            <div></div>
+                        </div>
+                        
+                        <input type="range" id="speedSlider" class="speed-slider" min="0" max="2000" value="1000" step="50">
+                        <div style="text-align: center;">Speed: <span id="speedValue">1000</span></div>
+                        
+                        <div style="text-align: center; margin-top: 15px;">
+                            <button onclick="beep()">🔊 Beep</button>
+                            <button onclick="setLED('red')">🔴 Red</button>
+                            <button onclick="setLED('green')">🟢 Green</button>
+                            <button onclick="setLED('blue')">🔵 Blue</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Column -->
+            <div>
+                <!-- Status Card -->
+                <div class="card">
+                    <h3>📊 System Status</h3>
+                    <div id="status">
+                        <div>Mode: <strong id="modeStatus">Manual</strong></div>
+                        <div>Speed: <strong id="speedStatus">1000</strong></div>
+                        <div>Ball: <strong id="ballStatus">No</strong></div>
+                        <div id="distanceStatus">Distance: -- cm</div>
+                        <div>Waypoints: <strong id="waypointCount">0</strong></div>
+                        <div>Camera: <strong id="cameraStatus">--</strong></div>
+                    </div>
+                </div>
+                
+                <!-- Waypoint Planner -->
+                <div class="card">
+                    <h3>📍 Waypoint Planner</h3>
+                    <div class="waypoint-panel">
+                        <div class="waypoint-input">
+                            <input type="number" id="wpX" placeholder="X (cm)">
+                            <input type="number" id="wpY" placeholder="Y (cm)">
+                            <button class="btn-primary" onclick="addWaypoint()">Add</button>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn-danger" onclick="clearWaypoints()">Clear All</button>
+                            <button class="btn-primary" onclick="startNavigation()">Start Navigation</button>
+                            <button class="btn-warning" onclick="stopNavigation()">Stop</button>
+                        </div>
+                        <div id="waypointList" class="waypoint-list">
+                            <div style="text-align: center; color: #999;">No waypoints</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Info Card -->
+                <div class="card">
+                    <h3>💡 Tips</h3>
+                    <ul style="margin-left: 20px; line-height: 1.6;">
+                        <li><strong>Ball Follow:</strong> Place orange ball in camera view</li>
+                        <li><strong>Waypoint Nav:</strong> Add coordinates and start</li>
+                        <li><strong>Patrol:</strong> Automatic square route</li>
+                        <li><strong>Ball Hunt:</strong> Rotates to find ball</li>
+                        <li><strong>Collision Avoidance:</strong> <span style="color: #51cf66;">ACTIVE in ALL modes!</span></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Update status every second
+        setInterval(() => {
+            fetch('/api/status')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('modeStatus').textContent = data.mode.replace('_', ' ').toUpperCase();
+                    document.getElementById('speedStatus').textContent = data.speed;
+                    document.getElementById('ballStatus').textContent = data.ball_detected ? 'Yes' : 'No';
+                    document.getElementById('waypointCount').textContent = data.waypoints;
+                    document.getElementById('cameraStatus').textContent = data.camera_ready ? 'OK' : 'Error';
+                    
+                    const distanceDiv = document.getElementById('distanceStatus');
+                    if (data.distance < 20) {
+                        distanceDiv.innerHTML = `Distance: <strong class="distance-warning">${data.distance} cm - DANGER!</strong>`;
+                    } else {
+                        distanceDiv.innerHTML = `Distance: <strong class="distance-safe">${data.distance} cm</strong>`;
+                    }
+                });
+        }, 1000);
+        
+        // Load waypoints
+        function loadWaypoints() {
+            fetch('/api/waypoint/list')
+                .then(res => res.json())
+                .then(data => {
+                    const listDiv = document.getElementById('waypointList');
+                    if (data.waypoints.length === 0) {
+                        listDiv.innerHTML = '<div style="text-align: center; color: #999;">No waypoints</div>';
+                        return;
+                    }
+                    listDiv.innerHTML = data.waypoints.map(wp => `
+                        <div class="waypoint-item">
+                            <span>📍 WP${wp.index}: (${wp.x}, ${wp.y})</span>
+                            <button onclick="removeWaypoint(${wp.index})" style="background:#f44336; color:white; border:none; padding:2px 8px;">X</button>
+                        </div>
+                    `).join('');
+                });
+        }
+        
+        function addWaypoint() {
+            const x = document.getElementById('wpX').value;
+            const y = document.getElementById('wpY').value;
+            if (!x || !y) {
+                alert('Enter X and Y coordinates');
+                return;
+            }
+            fetch('/api/waypoint/add', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({x: parseInt(x), y: parseInt(y)})
+            }).then(() => {
+                loadWaypoints();
+                document.getElementById('wpX').value = '';
+                document.getElementById('wpY').value = '';
+            });
+        }
+        
+        function clearWaypoints() {
+            fetch('/api/waypoint/clear', {method: 'POST'}).then(() => loadWaypoints());
+        }
+        
+        function removeWaypoint(index) {
+            fetch(`/api/waypoint/remove/${index}`, {method: 'DELETE'}).then(() => loadWaypoints());
+        }
+        
+        function startNavigation() {
+            fetch('/api/navigation/start', {method: 'POST'});
+        }
+        
+        function stopNavigation() {
+            fetch('/api/navigation/stop', {method: 'POST'});
+        }
+        
+        function setMode(mode) {
+            fetch('/api/mode', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mode: mode})
+            });
+        }
+        
+        function move(direction) {
+            fetch(`/${direction}`);
+        }
+        
+        function stop() {
+            fetch('/stop');
+        }
+        
+        function beep() {
+            fetch('/beep');
+        }
+        
+        function setLED(color) {
+            fetch(`/led/${color}`);
+        }
+        
+        const speedSlider = document.getElementById('speedSlider');
+        speedSlider.addEventListener('input', () => {
+            const speed = speedSlider.value;
+            document.getElementById('speedValue').textContent = speed;
+            fetch(`/speed/${speed}`);
+        });
+        
+        // Initial load
+        loadWaypoints();
+        
+        // Stop car when page closes
+        window.addEventListener('beforeunload', () => fetch('/stop'));
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,54 @@
+namespace:
+  name: sandbox
+
+service:
+  port: 5002
+  targetPort: 5002
+  protocol: TCP
+  type: ClusterIP
+
+image:
+  repository: 82mtanveer/myrepo
+  tag: flask-robot-arm64-final
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 128Mi
+
+ports:
+  containerPort: 5002
+  protocol: TCP
+
+fullnameOverride: ""
+nameOverride: ""
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+
+env:
+  PIGPIO_ADDR: "10.103.216.235"
+  PIGPIO_PORT: "8889"
+
+securityContext:
+  privileged: false
+
+volumeMounts: []
+volumes: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: flask-robot
+  name: flask-robot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flask-robot
+  template:
+    metadata:
+      labels:
+        app: flask-robot
+    spec:
+      containers:
+      - name: flask-robot
+        image: 82mtanveer/myrepo:flask-robot_v1
+        imagePullPolicy: Always
+        ports:
+        - name: flaskport
+          containerPort: 5002
+          protocol: TCP
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-robot
+  labels:
+    app: flask-robot
+spec:
+  selector:
+    app: flask-robot
+  ports:
+  - name: flask-robot
+    protocol: TCP
+    port: 5002
+    targetPort: flaskport
+  type: LoadBalancer

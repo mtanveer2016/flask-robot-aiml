@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-robot
+  namespace: {{ .Values.namespace.name | default "staging" }}
+  labels:
+    app: flask-robot
+spec:
+  type: {{ .Values.service.type | default "ClusterIP" }}
+  ports:
+    - port: {{ .Values.service.port | default 5002 }}
+      targetPort: {{ .Values.service.targetPort | default 5002 }}
+      protocol: {{ .Values.service.protocol | default "TCP" }}
+      {{- if and (eq .Values.service.type "NodePort") .Values.service.nodePort }}
+      nodePort: {{ .Values.service.nodePort }}
+      {{- end }}
+  selector:
+    app: flask-robot

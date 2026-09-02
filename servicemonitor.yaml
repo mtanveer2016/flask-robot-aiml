@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: flask-robot-monitor
+  namespace: monitoring
+  labels:
+    release: prometheus  # Critical - must match Prometheus config
+spec:
+  selector:
+    matchLabels:
+      app: flask-robot
+      release: prometheus  # Match service labels
+  namespaceSelector:
+    matchNames:
+      - staging
+  endpoints:
+    - port: http
+      interval: 30s
+      path: /metrics

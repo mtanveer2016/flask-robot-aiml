@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-robot
+  namespace: staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flask-robot
+  template:
+    metadata:
+      labels:
+        app: flask-robot
+    spec:
+      containers:
+      - name: flask-robot
+        image: 82mtanveer/myrepo:flask-robot-arm64-latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5002
+        env:
+        - name: PIGPIO_ADDR
+          value: "10.103.216.235"   # Your Pi's IP address
+        - name: PIGPIO_PORT
+          value: "8889"
+        securityContext:
+          privileged: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-robot
+  namespace: staging
+spec:
+  selector:
+    app: flask-robot
+  ports:
+    - port: 5002
+      targetPort: 5002
+  type: ClusterIP

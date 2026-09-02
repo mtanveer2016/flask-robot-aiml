@@ -1,0 +1,14 @@
+apiVersion: v2
+name: flask-robot
+description: A Helm chart for deploying Flask Robot application
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - flask-robot
+  - flask
+  - python
+  - web
+maintainers:
+  - name: Tanveer
+    email: 82.m.tanveer@gmail.com

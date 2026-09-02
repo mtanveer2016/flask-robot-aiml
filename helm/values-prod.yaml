@@ -1,0 +1,53 @@
+namespace:
+  name: prod
+
+service:
+  port: 5002
+  targetPort: 5002
+  protocol: TCP
+  type: LoadBalancer
+
+image:
+  repository: 82mtanveer/myrepo
+  tag: flask-robot-arm64-final
+  pullPolicy: Always
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 350m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+ports:
+  containerPort: 5002
+  protocol: TCP
+
+env:
+  PIGPIO_ADDR: "10.103.216.235"
+  PIGPIO_PORT: "8889"
+
+securityContext:
+  privileged: true
+
+volumeMounts:
+  - name: i2c-dev
+    mountPath: /dev/i2c-1
+  - name: dev-mem
+    mountPath: /dev/mem
+  - name: dev-gpiomem
+    mountPath: /dev/gpiomem
+
+volumes:
+  - name: i2c-dev
+    hostPath:
+      path: /dev/i2c-1
+  - name: dev-mem
+    hostPath:
+      path: /dev/mem
+  - name: dev-gpiomem
+    hostPath:
+      path: /dev/gpiomem

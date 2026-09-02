@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Robot Car Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a2e;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .video-container {
+            background: black;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        .video-feed {
+            width: 100%;
+            height: auto;
+        }
+        button {
+            padding: 15px 25px;
+            margin: 5px;
+            font-size: 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .mode-btn {
+            background: #4CAF50;
+            color: white;
+        }
+        .mode-btn.active {
+            background: #ff9800;
+            transform: scale(1.05);
+        }
+        .control-btn {
+            background: #333;
+            color: white;
+            font-size: 24px;
+            width: 80px;
+            height: 80px;
+        }
+        .stop {
+            background: #f44336;
+        }
+        .speed-slider {
+            width: 100%;
+            margin: 20px 0;
+        }
+        .status {
+            background: #16213e;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Robot Car Controller</h1>
+        
+        <div class="video-container">
+            <img src="/video_feed" class="video-feed" id="videoFeed">
+        </div>
+        
+        <div class="status" id="status">
+            Mode: <span id="mode">Manual</span> | 
+            Speed: <span id="speed">1000</span> |
+            Ball: <span id="ball">No</span>
+        </div>
+        
+        <div>
+            <button class="mode-btn" onclick="setMode('manual')">🎮 Manual</button>
+            <button class="mode-btn" onclick="setMode('ball_follow')">⚽ Ball Follow</button>
+            <button class="mode-btn" onclick="setMode('avoid')">🛡️ Obstacle Avoid</button>
+        </div>
+        
+        <div style="margin: 20px 0;">
+            <button class="control-btn" onmousedown="move('forward')" onmouseup="stop()" ontouchstart="move('forward')" ontouchend="stop()">▲</button>
+        </div>
+        <div>
+            <button class="control-btn" onmousedown="move('left')" onmouseup="stop()" ontouchstart="move('left')" ontouchend="stop()">◀</button>
+            <button class="control-btn stop" onclick="stop()">■</button>
+            <button class="control-btn" onmousedown="move('right')" onmouseup="stop()" ontouchstart="move('right')" ontouchend="stop()">▶</button>
+        </div>
+        <div style="margin: 10px 0;">
+            <button class="control-btn" onmousedown="move('backward')" onmouseup="stop()" ontouchstart="move('backward')" ontouchend="stop()">▼</button>
+        </div>
+        
+        <div>
+            <input type="range" id="speedSlider" class="speed-slider" min="0" max="2000" value="1000" step="50">
+            <p>Speed: <span id="speedValue">1000</span></p>
+        </div>
+        
+        <div>
+            <button onclick="beep()">🔊 Beep</button>
+            <button onclick="setLED('red')">🔴 Red</button>
+            <button onclick="setLED('green')">🟢 Green</button>
+            <button onclick="setLED('blue')">🔵 Blue</button>
+        </div>
+    </div>
+    
+    <script>
+        // Update status every second
+        setInterval(() => {
+            fetch('/api/status')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('mode').textContent = data.mode;
+                    document.getElementById('speed').textContent = data.speed;
+                    document.getElementById('ball').textContent = data.ball_detected ? 'Yes' : 'No';
+                });
+        }, 1000);
+        
+        function setMode(mode) {
+            fetch('/api/mode', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mode: mode})
+            }).then(() => {
+                document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+                event.target.classList.add('active');
+            });
+        }
+        
+        function move(direction) {
+            fetch(`/${direction}`);
+        }
+        
+        function stop() {
+            fetch('/stop');
+        }
+        
+        function beep() {
+            fetch('/beep');
+        }
+        
+        function setLED(color) {
+            fetch(`/led/${color}`);
+        }
+        
+        const speedSlider = document.getElementById('speedSlider');
+        speedSlider.addEventListener('input', () => {
+            const speed = speedSlider.value;
+            document.getElementById('speedValue').textContent = speed;
+            fetch(`/speed/${speed}`);
+        });
+        
+        // Stop car when page is closed
+        window.addEventListener('beforeunload', () => {
+            fetch('/stop');
+        });
+    </script>
+</body>
+</html>
+

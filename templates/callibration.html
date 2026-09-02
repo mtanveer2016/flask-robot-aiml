@@ -1,0 +1,794 @@
+CTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>🎨 Ball Following Calibration - Robot Car</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #ccc;
+        }
+
+        /* Grid Layout */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        /* Cards */
+        .card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .card h3 {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Video Container */
+        .video-container {
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 15px;
+            position: relative;
+        }
+
+        .video-feed {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* Slider Styles */
+        .slider-container {
+            margin: 15px 0;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 5px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+
+        .value-display {
+            display: inline-block;
+            background: rgba(0,0,0,0.5);
+            padding: 2px 8px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        /* Color Preview */
+        .color-preview {
+            width: 100%;
+            height: 100px;
+            border-radius: 10px;
+            margin-top: 10px;
+            border: 2px solid white;
+        }
+
+        /* Status Badges */
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            margin: 2px;
+        }
+
+        .status-detected {
+            background: #4CAF50;
+            animation: pulse 1s infinite;
+        }
+
+        .status-not-detected {
+            background: #f44336;
+        }
+
+        .status-searching {
+            background: #ff9800;
+        }
+
+        .status-following {
+            background: #4CAF50;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .btn-primary {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-info {
+            background: #2196F3;
+            color: white;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat-card {
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #ccc;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        /* Info Box */
+        .info-box {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .info-box ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .info-box li {
+            margin: 5px 0;
+            line-height: 1.5;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .btn {
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🎨 Ball Following Calibration Tool</h1>
+            <p>Adjust HSV values and PID settings to optimize ball detection and following</p>
+        </div>
+
+        <div class="grid">
+            <!-- Video Feed Card -->
+            <div class="card">
+                <h3>
+                    <span>📹</span> Live Preview
+                    <span id="detectionStatus" style="margin-left: auto;"></span>
+                </h3>
+                <div class="video-container">
+                    <img src="/video_feed" class="video-feed" id="videoFeed" alt="Video Feed">
+                </div>
+                
+                <!-- Real-time Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Ball Detected</div>
+                        <div class="stat-value" id="statDetected">No</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Confidence</div>
+                        <div class="stat-value" id="statConfidence">0%</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Ball Position</div>
+                        <div class="stat-value" id="statPosition">(320, 240)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">State</div>
+                        <div class="stat-value" id="statState">SEARCHING</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- HSV Color Calibration Card -->
+            <div class="card">
+                <h3>
+                    <span>🎨</span> Color Detection (HSV)
+                    <button class="btn btn-info" onclick="resetHSV()" style="margin-left: auto; padding: 5px 10px;">Reset</button>
+                </h3>
+                
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Hue Minimum (Color)</span>
+                        <span class="value-display" id="hMinValue">5</span>
+                    </div>
+                    <input type="range" id="hMin" min="0" max="179" value="5" step="1">
+                </div>
+
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Hue Maximum (Color)</span>
+                        <span class="value-display" id="hMaxValue">15</span>
+                    </div>
+                    <input type="range" id="hMax" min="0" max="179" value="15" step="1">
+                </div>
+
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Saturation Minimum (Purity)</span>
+                        <span class="value-display" id="sMinValue">100</span>
+                    </div>
+                    <input type="range" id="sMin" min="0" max="255" value="100" step="5">
+                </div>
+
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Saturation Maximum (Purity)</span>
+                        <span class="value-display" id="sMaxValue">255</span>
+                    </div>
+                    <input type="range" id="sMax" min="0" max="255" value="255" step="5">
+                </div>
+
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Value Minimum (Brightness)</span>
+                        <span class="value-display" id="vMinValue">100</span>
+                    </div>
+                    <input type="range" id="vMin" min="0" max="255" value="100" step="5">
+                </div>
+
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Value Maximum (Brightness)</span>
+                        <span class="value-display" id="vMaxValue">255</span>
+                    </div>
+                    <input type="range" id="vMax" min="0" max="255" value="255" step="5">
+                </div>
+
+                <div class="color-preview" id="colorPreview" style="background: linear-gradient(to right, 
+                    hsl(5, 100%, 50%), hsl(15, 100%, 50%));"></div>
+
+                <div style="margin-top: 15px; text-align: center;">
+                    <button class="btn btn-primary" onclick="applyCalibration()">Apply Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <!-- PID Tuning Card -->
+            <div class="card">
+                <h3>
+                    <span>⚙️</span> PID Tuning (Smooth Following)
+                    <button class="btn btn-info" onclick="resetPID()" style="margin-left: auto; padding: 5px 10px;">Reset</button>
+                </h3>
+                
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Kp (Proportional) - Turning Strength</span>
+                        <span class="value-display" id="kpValue">0.80</span>
+                    </div>
+                    <input type="range" id="kp" min="0" max="2.0" value="0.80" step="0.01">
+                    <small>Higher = turns faster toward ball</small>
+                </div>
+
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Ki (Integral) - Steady-State Error</span>
+                        <span class="value-display" id="kiValue">0.02</span>
+                    </div>
+                    <input type="range" id="ki" min="0" max="0.5" value="0.02" step="0.01">
+                    <small>Higher = corrects persistent offset</small>
+                </div>
+
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Kd (Derivative) - Smoothing</span>
+                        <span class="value-display" id="kdValue">0.10</span>
+                    </div>
+                    <input type="range" id="kd" min="0" max="0.5" value="0.10" step="0.01">
+                    <small>Higher = reduces oscillation</small>
+                </div>
+
+                <div style="margin-top: 15px; text-align: center;">
+                    <button class="btn btn-primary" onclick="applyPID()">Apply PID Settings</button>
+                </div>
+            </div>
+
+            <!-- Troubleshooting & Tips Card -->
+            <div class="card">
+                <h3>
+                    <span>💡</span> Troubleshooting Tips
+                </h3>
+                
+                <div class="info-box">
+                    <h4>🔴 Ball Not Detected?</h4>
+                    <ul>
+                        <li>Increase Hue range (try 0-20 for orange/red)</li>
+                        <li>Decrease Saturation Minimum to 50</li>
+                        <li>Decrease Value Minimum to 50</li>
+                        <li>Make sure ball is well-lit</li>
+                    </ul>
+                </div>
+
+                <div class="info-box">
+                    <h4>🟡 False Detections (Wrong objects)?</h4>
+                    <ul>
+                        <li>Decrease Hue range (make it narrower)</li>
+                        <li>Increase Saturation Minimum to 120+</li>
+                        <li>Increase Value Minimum to 100+</li>
+                    </ul>
+                </div>
+
+                <div class="info-box">
+                    <h4>🔄 Robot Turns Too Slow?</h4>
+                    <ul>
+                        <li>Increase Kp to 1.0-1.5</li>
+                        <li>Decrease Ki to 0.01</li>
+                    </ul>
+                </div>
+
+                <div class="info-box">
+                    <h4>🎢 Robot Oscillates (Wiggles)?</h4>
+                    <ul>
+                        <li>Increase Kd to 0.15-0.25</li>
+                        <li>Decrease Kp to 0.5-0.7</li>
+                    </ul>
+                </div>
+
+                <div class="info-box">
+                    <h4>📊 Current Color Values for Orange</h4>
+                    <ul>
+                        <li>Hue: 5-15 (orange range)</li>
+                        <li>Saturation: 100-255 (vibrant colors)</li>
+                        <li>Value: 100-255 (not too dark)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div style="text-align: center; margin-top: 20px;">
+            <button class="btn btn-warning" onclick="switchToBallFollow()">⚽ Switch to Ball Following Mode</button>
+            <button class="btn btn-danger" onclick="stopCar()">⏹️ Emergency Stop</button>
+            <button class="btn btn-info" onclick="refreshVideo()">🔄 Refresh Video</button>
+            <button class="btn btn-primary" onclick="saveSettings()">💾 Save Current Settings</button>
+        </div>
+    </div>
+
+    <script>
+        // ================= Global Variables =================
+        let statusInterval = null;
+        let calibrationApplied = false;
+
+        // ================= DOM Elements =================
+        // HSV Elements
+        const hMin = document.getElementById('hMin');
+        const hMax = document.getElementById('hMax');
+        const sMin = document.getElementById('sMin');
+        const sMax = document.getElementById('sMax');
+        const vMin = document.getElementById('vMin');
+        const vMax = document.getElementById('vMax');
+        
+        // PID Elements
+        const kp = document.getElementById('kp');
+        const ki = document.getElementById('ki');
+        const kd = document.getElementById('kd');
+
+        // ================= Initialize =================
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load current settings
+            loadCurrentSettings();
+            
+            // Setup event listeners for value displays
+            setupValueDisplays();
+            
+            // Start status updates
+            startStatusUpdates();
+            
+            // Setup auto-apply after user stops sliding
+            setupAutoApply();
+        });
+
+        // ================= Load Current Settings =================
+        function loadCurrentSettings() {
+            fetch('/api/ball/settings')
+                .then(response => response.json())
+                .then(data => {
+                    // Load HSV values
+                    hMin.value = data.h_min;
+                    hMax.value = data.h_max;
+                    sMin.value = data.s_min;
+                    sMax.value = data.s_max;
+                    vMin.value = data.v_min;
+                    vMax.value = data.v_max;
+                    
+                    // Load PID values
+                    kp.value = data.kp;
+                    ki.value = data.ki;
+                    kd.value = data.kd;
+                    
+                    // Update displays
+                    updateAllValues();
+                    updateColorPreview();
+                })
+                .catch(error => console.error('Error loading settings:', error));
+        }
+
+        // ================= Setup Value Displays =================
+        function setupValueDisplays() {
+            const sliders = ['hMin', 'hMax', 'sMin', 'sMax', 'vMin', 'vMax', 'kp', 'ki', 'kd'];
+            sliders.forEach(id => {
+                const slider = document.getElementById(id);
+                slider.addEventListener('input', () => {
+                    document.getElementById(id + 'Value').textContent = 
+                        id.includes('kp') || id.includes('ki') || id.includes('kd') ? 
+                        parseFloat(slider.value).toFixed(2) : slider.value;
+                    if (id.includes('h')) updateColorPreview();
+                });
+            });
+        }
+
+        function updateAllValues() {
+            document.getElementById('hMinValue').textContent = hMin.value;
+            document.getElementById('hMaxValue').textContent = hMax.value;
+            document.getElementById('sMinValue').textContent = sMin.value;
+            document.getElementById('sMaxValue').textContent = sMax.value;
+            document.getElementById('vMinValue').textContent = vMin.value;
+            document.getElementById('vMaxValue').textContent = vMax.value;
+            document.getElementById('kpValue').textContent = parseFloat(kp.value).toFixed(2);
+            document.getElementById('kiValue').textContent = parseFloat(ki.value).toFixed(2);
+            document.getElementById('kdValue').textContent = parseFloat(kd.value).toFixed(2);
+        }
+
+        function updateColorPreview() {
+            const hueStart = parseInt(hMin.value);
+            const hueEnd = parseInt(hMax.value);
+            const preview = document.getElementById('colorPreview');
+            preview.style.background = `linear-gradient(to right, 
+                hsl(${hueStart}, 100%, 50%), 
+                hsl(${hueEnd}, 100%, 50%))`;
+        }
+
+        // ================= Auto Apply (Debounced) =================
+        let autoApplyTimeout;
+        
+        function setupAutoApply() {
+            const sliders = ['hMin', 'hMax', 'sMin', 'sMax', 'vMin', 'vMax'];
+            sliders.forEach(id => {
+                document.getElementById(id).addEventListener('input', () => {
+                    clearTimeout(autoApplyTimeout);
+                    autoApplyTimeout = setTimeout(() => {
+                        applyCalibration();
+                    }, 500);
+                });
+            });
+        }
+
+        // ================= Apply Calibration =================
+        function applyCalibration() {
+            const settings = {
+                h_min: parseInt(hMin.value),
+                h_max: parseInt(hMax.value),
+                s_min: parseInt(sMin.value),
+                s_max: parseInt(sMax.value),
+                v_min: parseInt(vMin.value),
+                v_max: parseInt(vMax.value)
+            };
+            
+            fetch('/api/ball/calibrate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(settings)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    calibrationApplied = true;
+                    showTemporaryMessage('✅ Calibration applied!', '#4CAF50');
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        // ================= Apply PID Settings =================
+        function applyPID() {
+            const pid = {
+                kp: parseFloat(kp.value),
+                ki: parseFloat(ki.value),
+                kd: parseFloat(kd.value)
+            };
+            
+            fetch('/api/ball/tune', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(pid)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showTemporaryMessage('✅ PID settings applied!', '#4CAF50');
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        // ================= Reset Functions =================
+        function resetHSV() {
+            hMin.value = 5;
+            hMax.value = 15;
+            sMin.value = 100;
+            sMax.value = 255;
+            vMin.value = 100;
+            vMax.value = 255;
+            updateAllValues();
+            updateColorPreview();
+            applyCalibration();
+            showTemporaryMessage('🔄 HSV reset to defaults', '#ff9800');
+        }
+
+        function resetPID() {
+            kp.value = 0.8;
+            ki.value = 0.02;
+            kd.value = 0.1;
+            updateAllValues();
+            applyPID();
+            showTemporaryMessage('🔄 PID reset to defaults', '#ff9800');
+        }
+
+        // ================= Quick Actions =================
+        function switchToBallFollow() {
+            fetch('/api/mode/set', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mode: 'ball_follow'})
+            })
+            .then(() => {
+                showTemporaryMessage('⚽ Switched to Ball Following Mode!', '#4CAF50');
+            });
+        }
+
+        function stopCar() {
+            fetch('/stop')
+                .then(() => showTemporaryMessage('⏹️ Emergency Stop!', '#f44336'));
+        }
+
+        function refreshVideo() {
+            const video = document.getElementById('videoFeed');
+            video.src = '/video_feed?' + new Date().getTime();
+            showTemporaryMessage('🔄 Video refreshed', '#2196F3');
+        }
+
+        function saveSettings() {
+            // Save to localStorage
+            const settings = {
+                hsv: {
+                    h_min: parseInt(hMin.value),
+                    h_max: parseInt(hMax.value),
+                    s_min: parseInt(sMin.value),
+                    s_max: parseInt(sMax.value),
+                    v_min: parseInt(vMin.value),
+                    v_max: parseInt(vMax.value)
+                },
+                pid: {
+                    kp: parseFloat(kp.value),
+                    ki: parseFloat(ki.value),
+                    kd: parseFloat(kd.value)
+                }
+            };
+            localStorage.setItem('ball_follower_settings', JSON.stringify(settings));
+            showTemporaryMessage('💾 Settings saved to browser!', '#4CAF50');
+        }
+
+        function loadSavedSettings() {
+            const saved = localStorage.getItem('ball_follower_settings');
+            if (saved) {
+                const settings = JSON.parse(saved);
+                hMin.value = settings.hsv.h_min;
+                hMax.value = settings.hsv.h_max;
+                sMin.value = settings.hsv.s_min;
+                sMax.value = settings.hsv.s_max;
+                vMin.value = settings.hsv.v_min;
+                vMax.value = settings.hsv.v_max;
+                kp.value = settings.pid.kp;
+                ki.value = settings.pid.ki;
+                kd.value = settings.pid.kd;
+                updateAllValues();
+                updateColorPreview();
+                applyCalibration();
+                applyPID();
+                showTemporaryMessage('📀 Loaded saved settings!', '#4CAF50');
+            }
+        }
+
+        // ================= Status Updates =================
+        function startStatusUpdates() {
+            statusInterval = setInterval(() => {
+                fetch('/api/ball/detect')
+                    .then(response => response.json())
+                    .then(data => {
+                        // Update status displays
+                        const detectedSpan = document.getElementById('statDetected');
+                        const confidenceSpan = document.getElementById('statConfidence');
+                        const positionSpan = document.getElementById('statPosition');
+                        const stateSpan = document.getElementById('statState');
+                        const detectionStatus = document.getElementById('detectionStatus');
+                        
+                        if (data.detected) {
+                            detectedSpan.innerHTML = '<span class="status-badge status-detected">✓ DETECTED</span>';
+                            confidenceSpan.textContent = `${Math.round(data.confidence * 100)}%`;
+                            positionSpan.textContent = `(${data.position[0]}, ${data.position[1]})`;
+                            detectionStatus.innerHTML = '<span class="status-badge status-detected">⚽ Ball Detected</span>';
+                        } else {
+                            detectedSpan.innerHTML = '<span class="status-badge status-not-detected">✗ NOT DETECTED</span>';
+                            confidenceSpan.textContent = '0%';
+                            positionSpan.textContent = '(unknown)';
+                            detectionStatus.innerHTML = '<span class="status-badge status-not-detected">🔍 No Ball</span>';
+                        }
+                        
+                        // Update state
+                        if (data.state === 'FOLLOWING') {
+                            stateSpan.innerHTML = '<span class="status-badge status-following">FOLLOWING</span>';
+                        } else if (data.state === 'SEARCHING') {
+                            stateSpan.innerHTML = '<span class="status-badge status-searching">SEARCHING</span>';
+                        } else {
+                            stateSpan.textContent = data.state;
+                        }
+                    })
+                    .catch(error => console.error('Status error:', error));
+                
+                // Refresh video periodically
+                const video = document.getElementById('videoFeed');
+                if (video && !calibrationApplied) {
+                    // Only refresh if not constantly calibrating
+                    video.src = '/video_feed?' + new Date().getTime();
+                }
+            }, 500);
+        }
+
+        // ================= Helper Functions =================
+        function showTemporaryMessage(message, color) {
+            // Create floating message
+            const msgDiv = document.createElement('div');
+            msgDiv.textContent = message;
+            msgDiv.style.position = 'fixed';
+            msgDiv.style.bottom = '20px';
+            msgDiv.style.right = '20px';
+            msgDiv.style.backgroundColor = color;
+            msgDiv.style.color = 'white';
+            msgDiv.style.padding = '10px 20px';
+            msgDiv.style.borderRadius = '5px';
+            msgDiv.style.zIndex = '9999';
+            msgDiv.style.animation = 'fadeOut 2s forwards';
+            document.body.appendChild(msgDiv);
+            
+            setTimeout(() => {
+                msgDiv.remove();
+            }, 2000);
+        }
+
+        // Add CSS animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes fadeOut {
+                0% { opacity: 1; transform: translateY(0); }
+                70% { opacity: 1; transform: translateY(0); }
+                100% { opacity: 0; transform: translateY(-20px); }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // ================= Cleanup =================
+        window.addEventListener('beforeunload', function() {
+            if (statusInterval) clearInterval(statusInterval);
+        });
+    </script>
+</body>
+</html>
+

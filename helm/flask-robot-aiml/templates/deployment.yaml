@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "flask-robot-aiml.fullname" . }}
+  labels:
+    app: flask-robot-aiml
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: flask-robot-aiml
+  template:
+    metadata:
+      labels:
+        app: flask-robot-aiml
+    spec:
+      containers:
+      - name: flask-robot-aiml
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        ports:
+        - containerPort: {{ .Values.service.port }}
+        env:
+        - name: ENVIRONMENT
+          value: "{{ .Values.env.ENVIRONMENT }}"
+        - name: GROQ_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: groq-api-key
+              key: GROQ_API_KEY
+        resources:
+          requests:
+            memory: "{{ .Values.resources.requests.memory }}"
+            cpu: "{{ .Values.resources.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.resources.limits.memory }}"
+            cpu: "{{ .Values.resources.limits.cpu }}"
+        volumeMounts:
+        - name: dev-gpiomem
+          mountPath: /dev/gpiomem
+        - name: dev-i2c
+          mountPath: /dev/i2c-1
+        - name: dev-mem
+          mountPath: /dev/mem
+      volumes:
+      - name: dev-gpiomem
+        hostPath:
+          path: /dev/gpiomem
+      - name: dev-i2c
+        hostPath:
+          path: /dev/i2c-1
+      - name: dev-mem
+        hostPath:
+          path: /dev/mem

@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: flask-robot-aiml
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/mtanveer2016/flask-robot-aiml.git
+    targetRevision: main
+    path: helm/flask-robot-aiml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

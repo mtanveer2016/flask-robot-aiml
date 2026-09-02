@@ -1,0 +1,28 @@
+replicaCount: 1
+
+image:
+  repository: 82mtanveer/myrepo
+  tag: flask-robot-aiml
+  pullPolicy: IfNotPresent
+
+service:
+  type: NodePort
+  port: 5002
+  nodePort: 32392
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "250m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"
+
+env:
+  ENVIRONMENT: "staging"
+  GROQ_API_KEY: ""  # Will be set via Kubernetes secret
+
+volumes:
+  gpio: true
+  i2c: true
+  mem: true

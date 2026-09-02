@@ -10,6 +10,11 @@ service:
   port: 5002
   nodePort: 32392
 
+env:
+  ENVIRONMENT: staging
+  LG_ADDR: localhost
+  LG_PORT: 8889
+
 resources:
   requests:
     memory: "128Mi"
@@ -17,21 +22,3 @@ resources:
   limits:
     memory: "256Mi"
     cpu: "500m"
-
-env:
-  ENVIRONMENT: "staging"
-#  GROQ_API_KEY: ""  # Will be set via Kubernetes secret
-
-volumes:
-  gpio: true
-  i2c: true
-  mem: true
-# Add this section if it doesn't exist
-securityContext:
-  privileged: true
-
-# Or add specific capabilities
-capabilities:
-  add:
-  - SYS_ADMIN
-  - IPC_LOCK

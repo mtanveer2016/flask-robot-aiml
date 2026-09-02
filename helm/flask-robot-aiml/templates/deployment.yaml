@@ -1,11 +1,12 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "flask-robot-aiml.fullname" . }}
+  name: flask-robot-aiml-flask-robot-aiml
+  namespace: staging
   labels:
     app: flask-robot-aiml
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: 1
   selector:
     matchLabels:
       app: flask-robot-aiml
@@ -14,38 +15,41 @@ spec:
       labels:
         app: flask-robot-aiml
     spec:
+      hostNetwork: true
+      hostPID: true
+      hostIPC: true
       securityContext:
-        runAsUser: 0  # Run as root
+        runAsUser: 0
         runAsGroup: 0
+        fsGroup: 0
       containers:
       - name: flask-robot-aiml
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        image: 82mtanveer/myrepo:flask-robot-arm64-final
+        imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: {{ .Values.service.port }}
+        - containerPort: 5002
         securityContext:
           privileged: true
           capabilities:
             add:
-            - SYS_ADMIN
-            - IPC_LOCK
+            - ALL
         env:
         - name: ENVIRONMENT
-          value: "{{ .Values.env.ENVIRONMENT }}"
+          value: "staging"
         - name: LG_ADDR
-          value: "{{ .Values.env.LG_ADDR | default "localhost" }}"
+          value: "localhost"
         - name: LG_PORT
-          value: "{{ .Values.env.LG_PORT | default "8889" }}"
+          value: "8889"
         resources:
           requests:
-            memory: "{{ .Values.resources.requests.memory }}"
-            cpu: "{{ .Values.resources.requests.cpu }}"
+            memory: "128Mi"
+            cpu: "250m"
           limits:
-            memory: "{{ .Values.resources.limits.memory }}"
-            cpu: "{{ .Values.resources.limits.cpu }}"
+            memory: "256Mi"
+            cpu: "500m"
         volumeMounts:
         - name: dev-gpiomem
-          mountPath: /dev/gpiomem
+          mountPath: /dev/gpiomem0
         - name: dev-i2c
           mountPath: /dev/i2c-1
         - name: dev-mem
@@ -53,7 +57,7 @@ spec:
       volumes:
       - name: dev-gpiomem
         hostPath:
-          path: /dev/gpiomem
+          path: /dev/gpiomem0
           type: CharDevice
       - name: dev-i2c
         hostPath:

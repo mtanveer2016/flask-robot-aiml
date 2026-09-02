@@ -33,3 +33,4 @@ tmp/
 temp/
 *.tmp
 
+argocd-linux-arm64

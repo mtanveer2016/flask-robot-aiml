@@ -19,13 +19,7 @@ spec:
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         ports:
         - containerPort: {{ .Values.service.port }}
-        env:
-        - name: ENVIRONMENT
-          value: "{{ .Values.env.ENVIRONMENT }}"
-        - name: GROQ_API_KEY
-          valueFrom:
-            secretKeyRef:
-        resources:
+       resources:
           requests:
             memory: "{{ .Values.resources.requests.memory }}"
             cpu: "{{ .Values.resources.requests.cpu }}"

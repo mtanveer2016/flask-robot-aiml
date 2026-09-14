@@ -76,8 +76,8 @@ WORKDIR /app
 # ============ INSTALL PYTHON DEPENDENCIES ============
 COPY requirements.txt .
 
-RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip3 install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel --break-system-packages && \
+    pip3 install --no-cache-dir -r requirements.txt --break-system-packages
 
 # ============ COPY APPLICATION ============
 COPY . .

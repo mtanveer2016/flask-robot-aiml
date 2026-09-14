@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Control</title>
+    <style>
+        body { font-family: Arial; background: #0d1117; color: #e6edf3; padding: 20px; text-align: center; }
+        .container { max-width: 600px; margin: 0 auto; }
+        h1 { color: #58a6ff; }
+        button { padding: 30px; font-size: 32px; border-radius: 50%; background: #238636; color: white; border: none; cursor: pointer; width: 100px; height: 100px; margin: 10px; }
+        button:disabled { background: #6e7681; cursor: not-allowed; }
+        button.recording { background: #da3633; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .box { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px; margin: 10px 0; text-align: left; min-height: 60px; }
+        .box.has-content { border-color: #58a6ff; }
+        .box.has-response { border-color: #238636; }
+        .label { font-size: 12px; color: #8b949e; margin-bottom: 5px; }
+        .status { font-size: 16px; color: #ffa657; margin: 10px 0; }
+        .error { background: #161b22; color: #f85149; border: 1px solid #f85149; padding: 12px; border-radius: 8px; margin: 10px 0; display: none; }
+        .error.show { display: block; }
+        .log { background: #0d1117; border: 1px solid #30363d; padding: 10px; font-family: monospace; font-size: 11px; color: #8b949e; max-height: 150px; overflow-y: auto; text-align: left; margin-top: 10px; }
+        .timer { font-size: 14px; color: #8b949e; }
+        .quick { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 10px 0; }
+        .quick button { width: auto; height: auto; padding: 6px 14px; font-size: 13px; border-radius: 16px; background: #21262d; color: #8b949e; border: 1px solid #30363d; }
+        .quick button:hover { background: #30363d; color: #f0f6fc; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Voice Control</h1>
+        <div class="status" id="status">Press the mic to start</div>
+        <div class="timer" id="timer">0s</div>
+
+        <div>
+            <button id="micBtn" onclick="startRecording()">🎙️</button>
+            <button id="stopBtn" onclick="stopRecording()" disabled>⏹️</button>
+        </div>
+
+        <div class="quick">
+            <button onclick="sendCommand('move forward')">⬆️ Forward</button>
+            <button onclick="sendCommand('turn left')">↺ Left</button>
+            <button onclick="sendCommand('turn right')">↻ Right</button>
+            <button onclick="sendCommand('stop')">⏹ Stop</button>
+            <button onclick="sendCommand('beep')">🔊 Beep</button>
+        </div>
+
+        <div class="box" id="transcriptBox">
+            <div class="label">🗣️ You said:</div>
+            <div id="transcript">-</div>
+        </div>
+
+        <div class="box" id="responseBox">
+            <div class="label">🤖 AI Response:</div>
+            <div id="response">-</div>
+        </div>
+
+        <div class="error" id="errorBox">
+            <div id="errorMsg"></div>
+        </div>
+
+        <div class="log" id="log">Log:</div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let audioStream;
+        let isRecording = false;
+        let timerInterval;
+        let seconds = 0;
+
+        function log(msg) {
+            console.log(msg);
+            const logEl = document.getElementById('log');
+            logEl.innerHTML += '<br>' + msg;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function showError(msg) {
+            const errBox = document.getElementById('errorBox');
+            errBox.classList.add('show');
+            document.getElementById('errorMsg').textContent = '❌ ' + msg;
+            document.getElementById('status').textContent = '❌ Error';
+            log('❌ ' + msg);
+        }
+
+        function clearError() {
+            document.getElementById('errorBox').classList.remove('show');
+        }
+
+        function startRecording() {
+            if (isRecording) return;
+
+            clearError();
+            log('=== START ===');
+
+            document.getElementById('status').textContent = 'Requesting microphone...';
+            document.getElementById('micBtn').disabled = true;
+
+            navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                log('✅ Microphone granted');
+                audioStream = stream;
+
+                try {
+                    mediaRecorder = new MediaRecorder(stream);
+                } catch (e) {
+                    showError('MediaRecorder not supported: ' + e.message);
+                    return;
+                }
+
+                audioChunks = [];
+                isRecording = true;
+                seconds = 0;
+
+                document.getElementById('micBtn').disabled = false;
+                document.getElementById('micBtn').classList.add('recording');
+                document.getElementById('stopBtn').disabled = false;
+                document.getElementById('status').textContent = '🔴 Recording... speak now';
+                document.getElementById('timer').textContent = '0s';
+
+                timerInterval = setInterval(() => {
+                    seconds++;
+                    document.getElementById('timer').textContent = seconds + 's';
+                }, 1000);
+
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                        log('📦 Chunk: ' + event.data.size + ' bytes');
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    log('🛑 Stopped');
+                    isRecording = false;
+                    clearInterval(timerInterval);
+                    document.getElementById('micBtn').classList.remove('recording');
+                    document.getElementById('stopBtn').disabled = true;
+
+                    if (audioChunks.length === 0) {
+                        showError('No audio recorded');
+                        return;
+                    }
+
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    log('📦 Blob: ' + audioBlob.size + ' bytes');
+
+                    const formData = new FormData();
+                    formData.append('audio', audioBlob, 'recording.webm');
+
+                    document.getElementById('status').textContent = '⏳ Processing (Whisper is slow on Pi, please wait)...';
+                    document.getElementById('transcript').textContent = '🧠 Transcribing...';
+
+                    log('📤 Sending to server...');
+
+                    // 120 second timeout
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+                    fetch('/ai/voice', {
+                        method: 'POST',
+                        body: formData,
+                        signal: controller.signal
+                    })
+                    .then(res => {
+                        clearTimeout(timeoutId);
+                        log('📥 HTTP ' + res.status);
+                        return res.json();
+                    })
+                    .then(data => {
+                        log('📥 Response: ' + JSON.stringify(data).substring(0, 200));
+
+                        if (data.success) {
+                            document.getElementById('transcript').textContent = data.transcription || '(empty)';
+                            document.getElementById('transcriptBox').classList.add('has-content');
+                            document.getElementById('response').textContent = data.response || '(empty)';
+                            document.getElementById('responseBox').classList.add('has-response');
+                            document.getElementById('status').textContent = '✅ Done';
+
+                            // Play audio
+                            if (data.audio) {
+                                try {
+                                    log('🔊 Playing audio...');
+                                    const audio = new Audio('data:audio/wav;base64,' + data.audio);
+                                    audio.play().catch(e => log('Play error: ' + e.message));
+                                } catch (e) {
+                                    log('Audio error: ' + e.message);
+                                }
+                            }
+                        } else {
+                            showError(data.error || 'Unknown error');
+                        }
+                    })
+                    .catch(err => {
+                        clearTimeout(timeoutId);
+                        if (err.name === 'AbortError') {
+                            showError('Timed out after 120s. The command may still have executed.');
+                        } else {
+                            showError('Connection error: ' + err.message);
+                        }
+                    });
+
+                    // Stop tracks
+                    if (audioStream) {
+                        audioStream.getTracks().forEach(t => t.stop());
+                        audioStream = null;
+                    }
+                };
+
+                mediaRecorder.start();
+                log('🔴 Recording started');
+
+                // Auto-stop after 5 seconds
+                setTimeout(() => {
+                    if (isRecording) {
+                        log('⏱️ Auto-stop');
+                        stopRecording();
+                    }
+                }, 5000);
+
+            })
+            .catch(err => {
+                log('❌ Mic error: ' + err.name + ' - ' + err.message);
+                showError(err.name + ': ' + err.message);
+                document.getElementById('micBtn').disabled = false;
+            });
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                log('🛑 Stop requested');
+                mediaRecorder.stop();
+            }
+        }
+
+        function sendCommand(command) {
+            log('📤 Quick: ' + command);
+            clearError();
+
+            document.getElementById('transcript').textContent = command;
+            document.getElementById('transcriptBox').classList.add('has-content');
+            document.getElementById('response').textContent = '⏳ Thinking...';
+            document.getElementById('status').textContent = '⏳ Processing...';
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+            fetch('/ai/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: command }),
+                signal: controller.signal
+            })
+            .then(res => {
+                clearTimeout(timeoutId);
+                return res.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('response').textContent = data.response || '(empty)';
+                    document.getElementById('responseBox').classList.add('has-response');
+                    document.getElementById('status').textContent = '✅ Done';
+                } else {
+                    showError(data.error || 'Unknown error');
+                }
+            })
+            .catch(err => {
+                clearTimeout(timeoutId);
+                if (err.name === 'AbortError') {
+                    showError('Request timed out');
+                } else {
+                    showError('Connection error: ' + err.message);
+                }
+            });
+        }
+
+        log('✅ Page loaded');
+    </script>
+</body>
+</html>

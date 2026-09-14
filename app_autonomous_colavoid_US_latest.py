@@ -1,4 +1,3 @@
-
 from flask import Flask, render_template, jsonify, request, Response
 from motor import Ordinary_Car
 from buzzer import Buzzer
@@ -14,6 +13,15 @@ import heapq
 from picamera2 import Picamera2
 import random
 import ultrasonic
+
+import sys
+
+import locale
+try:
+    locale.setlocale(locale.LC_ALL, 'en_GB.UTF-8')
+except locale.Error:
+    # Fallback to system default
+    pass
 
 app = Flask(__name__)
 
@@ -336,48 +344,77 @@ class SmartBallFollower:
 # Initialize ball follower
 ball_follower = SmartBallFollower()
 
-# ================= OBSTACLE AVOIDANCE SYSTEM =================
+# ================= ULTRASONIC SENSOR WRAPPER =================
 
-class ObstacleDetector:
-    """Detects obstacles using ultrasonic sensor simulation"""
+class UltrasonicSensor:
+    """Wrapper for the ultrasonic sensor with error handling"""
     
     def __init__(self):
-        self.front_distance = 100  # cm
+        try:
+            self.sensor = ultrasonic.Ultrasonic()
+            self.available = True
+            print("✅ Ultrasonic sensor initialized")
+        except Exception as e:
+            print(f"❌ Ultrasonic sensor error: {e}")
+            self.available = False
+    
+    def get_distance(self):
+        """Get distance in cm, returns None if error"""
+        if not self.available:
+            return None
+        try:
+            distance = self.sensor.get_distance()
+            # Validate reading (2-400cm is HC-SR04 range)
+            if distance and 2 <= distance <= 400:
+                return round(distance, 1)
+            return None
+        except Exception as e:
+            print(f"Ultrasonic read error: {e}")
+            return None
+
+# Create ultrasonic sensor instance
+ultrasonic_sensor = UltrasonicSensor()
+
+# ================= OBSTACLE DETECTOR =================
+
+class ObstacleDetector:
+    """Detects obstacles using REAL ultrasonic sensor"""
+    
+    def __init__(self):
+        self.front_distance = 100  # Default safe distance
         self.left_distance = 100
         self.right_distance = 100
         self.obstacle_detected = False
-        self.obstacle_side = None  # 'front', 'left', 'right'
+        self.obstacle_side = None
         self.safe_distance = 30  # cm
         self.danger_distance = 20  # cm
         
     def update_distances(self):
-        """Update distance readings (simulated - replace with actual sensors)"""
-        # In real implementation, read from ultrasonic sensors
-        # For now, simulate random obstacles for testing
-        # You should replace this with actual sensor readings
+        """Update distance readings from REAL ultrasonic sensor"""
         
-        # Just for simulation - remove in production
-        if random.random() < 0.05:  # 5% chance of obstacle
-            self.front_distance = random.uniform(10, 40)
-            self.obstacle_detected = True
-            self.obstacle_side = 'front'
-        else:
-            self.front_distance = random.uniform(50, 200)
-            if random.random() < 0.02:
-                self.left_distance = random.uniform(15, 35)
-                self.right_distance = random.uniform(50, 200)
+        # Get REAL distance from ultrasonic sensor
+        distance = ultrasonic_sensor.get_distance()
+        
+        if distance is not None:
+            self.front_distance = distance
+            
+            # Detect obstacle based on real data
+            if distance < self.safe_distance:
                 self.obstacle_detected = True
-                self.obstacle_side = 'left'
-            elif random.random() < 0.02:
-                self.right_distance = random.uniform(15, 35)
-                self.left_distance = random.uniform(50, 200)
-                self.obstacle_detected = True
-                self.obstacle_side = 'right'
+                self.obstacle_side = 'front'
+                
+                if distance < self.danger_distance:
+                    print(f"🚨 DANGER! Obstacle at {distance}cm")
+                else:
+                    print(f"⚠️ Warning: Obstacle at {distance}cm")
             else:
-                self.left_distance = random.uniform(50, 200)
-                self.right_distance = random.uniform(50, 200)
                 self.obstacle_detected = False
                 self.obstacle_side = None
+        else:
+            # No reading - assume safe
+            self.front_distance = 100
+            self.obstacle_detected = False
+            self.obstacle_side = None
         
     def get_obstacle_status(self):
         return {
@@ -388,61 +425,45 @@ class ObstacleDetector:
             'right_distance': self.right_distance
         }
 
+# ================= OBSTACLE AVOIDANCE =================
+
 class ObstacleAvoidance:
-    """Implements obstacle avoidance behavior"""
+    """Implements obstacle avoidance behavior using REAL sensor data"""
     
     def __init__(self):
         self.detector = ObstacleDetector()
-        self.state = "NORMAL"  # NORMAL, AVOIDING, TURNING
-        self.avoid_direction = None  # 'left', 'right'
+        self.state = "NORMAL"
+        self.avoid_direction = None
         self.avoid_start_time = 0
-        self.avoid_duration = 1.5  # seconds
+        self.avoid_duration = 1.5
         self.turn_speed = 400
         
     def get_avoidance_commands(self):
-        """Calculate motor commands for obstacle avoidance"""
+        """Calculate motor commands based on REAL obstacle detection"""
         self.detector.update_distances()
         
         if not self.detector.obstacle_detected:
             self.state = "NORMAL"
-            return None  # No avoidance needed
+            return None
             
-        obstacle_status = self.detector.get_obstacle_status()
-        front_dist = obstacle_status['front_distance']
-        left_dist = obstacle_status['left_distance']
-        right_dist = obstacle_status['right_distance']
+        front_dist = self.detector.front_distance
         
         # Check for immediate danger
         if front_dist < self.detector.danger_distance:
-            # Immediate stop and reverse
             self.state = "AVOIDING"
+            print(f"🚨 EMERGENCY STOP! Distance: {front_dist}cm")
             return (0, 0)  # Stop
             
         elif front_dist < self.detector.safe_distance:
-            # Obstacle in front - need to turn
             self.state = "TURNING"
-            
-            # Decide which way to turn based on side distances
-            if left_dist > right_dist:
-                self.avoid_direction = 'left'
-                return (-self.turn_speed, self.turn_speed)  # Turn left
-            else:
-                self.avoid_direction = 'right'
-                return (self.turn_speed, -self.turn_speed)  # Turn right
-                
-        elif left_dist < self.detector.safe_distance:
-            # Obstacle on left - turn right
-            self.state = "AVOIDING"
-            return (self.turn_speed, -self.turn_speed)
-            
-        elif right_dist < self.detector.safe_distance:
-            # Obstacle on right - turn left
-            self.state = "AVOIDING"
+            print(f"🔄 Turning to avoid obstacle at {front_dist}cm")
+            # Turn left (simple avoidance)
             return (-self.turn_speed, self.turn_speed)
         
         return None
-        
+    
     def get_visualization_info(self):
+        """Get obstacle information for display"""
         return {
             'state': self.state,
             'obstacle': self.detector.get_obstacle_status()
@@ -549,7 +570,7 @@ class PatrolMission:
         
         return (left_speed, right_speed)
 
-# ================= WAYPOINT NAVIGATION WITH OBSTACLE AVOIDANCE =================
+# ================= WAYPOINT NAVIGATION =================
 
 class Waypoint:
     def __init__(self, x, y, action="navigate", description="", duration=0):
@@ -1046,148 +1067,214 @@ def get_status():
     })
 
 # ================= Video Streaming =================
+# ================= Video Streaming =================
 def generate_frames():
     global current_mode, ball_follower, autonomous_active, path_planner, patrol_system
     
     frame_counter = 0
     
     while True:
-        if not camera_available:
-            frame = np.zeros((480, 640, 3), dtype=np.uint8)
-            cv2.putText(frame, "Camera Not Available", (50, 240), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-        else:
-            try:
-                frame = picam2.capture_array()
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-            except Exception as e:
-                print(f"Frame capture error: {e}")
-                continue
-        
-        motor_commands = (0, 0)
-        
-        if current_mode == "ball_follow":
-            # Process frame and get motor commands
-            frame, motor_commands = ball_follower.process_frame(frame)
+        try:
+            if not camera_available:
+                # Create a proper error frame
+                frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                cv2.putText(frame, "Camera Not Available", (50, 240), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                cv2.putText(frame, "Check camera connection", (50, 280), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            else:
+                try:
+                    frame = picam2.capture_array()
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                    
+                    # Ensure frame is valid
+                    if frame is None or frame.size == 0:
+                        raise ValueError("Empty frame captured")
+                        
+                except Exception as e:
+                    print(f"Frame capture error: {e}")
+                    # Create error frame
+                    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                    cv2.putText(frame, "Camera Error", (50, 240), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    continue
             
-            # Send motor commands
-            left_speed, right_speed = motor_commands
-            PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
+            motor_commands = (0, 0)
             
-            # Display motor commands on screen
-            cv2.putText(frame, f"Motor L: {left_speed} R: {right_speed}", (10, 150), 
+            # Get ultrasonic reading for display
+            ultrasonic_distance = ultrasonic_sensor.get_distance()
+            
+            # Display ultrasonic on frame (using text without emojis)
+            if ultrasonic_distance:
+                # Use plain text to avoid encoding issues
+                distance_text = f"Distance: {ultrasonic_distance}cm"
+                cv2.putText(frame, distance_text, (10, 130), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+                
+                if ultrasonic_distance < 10:
+                    cv2.putText(frame, "TOO CLOSE!", (10, 155), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                elif ultrasonic_distance < 30:
+                    cv2.putText(frame, "Getting Close", (10, 155), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            else:
+                cv2.putText(frame, "Sensor Error!", (10, 130), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            
+            if current_mode == "ball_follow":
+                # Process frame and get motor commands
+                frame, motor_commands = ball_follower.process_frame(frame)
+                
+                # Send motor commands
+                left_speed, right_speed = motor_commands
+                PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
+                
+                # Display motor commands on screen
+                cv2.putText(frame, f"Motor L: {left_speed} R: {right_speed}", (10, 150), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                
+                # Display mode and state
+                cv2.putText(frame, "BALL FOLLOWING MODE", (10, 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                
+                # Draw target area in center
+                cv2.rectangle(frame, (280, 200), (360, 280), (0, 255, 0), 2)
+                cv2.putText(frame, "Target Area", (290, 195), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+                cv2.line(frame, (0, 240), (640, 240), (255, 255, 0), 1)
+                
+            elif current_mode == "patrol":
+                if patrol_system.active:
+                    # Update car position (in real implementation, get from odometry)
+                    frame_counter += 1
+                    if frame_counter % 30 == 0:
+                        patrol_system.current_segment = (patrol_system.current_segment + 1) % len(patrol_system.patrol_path)
+                    
+                    left_speed, right_speed = patrol_system.get_patrol_commands(0, 0, 0)
+                    PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
+                    
+                    cv2.putText(frame, "PATROL MODE", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                    cv2.putText(frame, f"State: {patrol_system.patrol_state}", (10, 50), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                    cv2.putText(frame, f"Segment: {patrol_system.current_segment + 1}/{len(patrol_system.patrol_path)}", 
+                               (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                else:
+                    cv2.putText(frame, "PATROL MODE (INACTIVE)", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                    
+            elif current_mode == "waypoint_nav":
+                if path_planner.navigation_active:
+                    left_speed, right_speed = path_planner.get_navigation_commands()
+                    PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
+                    
+                    cv2.putText(frame, "WAYPOINT NAVIGATION", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                    cv2.putText(frame, f"State: {path_planner.navigation_state}", (10, 50), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                    
+                    current_wp = path_planner.get_current_waypoint()
+                    if current_wp:
+                        cv2.putText(frame, f"Target: ({current_wp.x}, {current_wp.y})", (10, 70), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                        cv2.putText(frame, f"Distance: {path_planner.calculate_distance(current_wp):.1f}cm", 
+                                   (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                else:
+                    cv2.putText(frame, "WAYPOINT NAVIGATION (INACTIVE)", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                               
+            elif current_mode == "obstacle_avoid":
+                avoidance_cmd = path_planner.obstacle_avoidance.get_avoidance_commands()
+                if avoidance_cmd is not None:
+                    left_speed, right_speed = avoidance_cmd
+                    PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
+                
+                cv2.putText(frame, "OBSTACLE AVOIDANCE MODE", (10, 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                
+                obstacle_info = path_planner.obstacle_avoidance.get_visualization_info()
+                cv2.putText(frame, f"State: {obstacle_info['state']}", (10, 50), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+                
+                if obstacle_info['obstacle']['detected']:
+                    side = obstacle_info['obstacle']['side']
+                    cv2.putText(frame, f"OBSTACLE DETECTED - {side.upper()}!", (10, 70), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                    cv2.putText(frame, f"Front: {obstacle_info['obstacle']['front_distance']:.1f}cm", 
+                               (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+                               
+            elif current_mode == "manual":
+                cv2.putText(frame, "MANUAL MODE", (10, 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                           
+            elif current_mode == "mission":
+                cv2.putText(frame, f"MISSION: {current_mission.name if current_mission else 'None'}", 
+                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            
+            # Display speed info
+            cv2.putText(frame, f"Speed Setting: {current_speed}", (10, 60), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
-            # Display mode and state
-            cv2.putText(frame, "BALL FOLLOWING MODE", (10, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            # Display mode indicator
+            mode_colors = {
+                "manual": (255, 255, 255),
+                "ball_follow": (0, 255, 0),
+                "waypoint_nav": (255, 255, 0),
+                "patrol": (255, 255, 0),
+                "obstacle_avoid": (0, 255, 255),
+                "mission": (0, 255, 255)
+            }
+            color = mode_colors.get(current_mode, (255, 255, 255))
+            cv2.rectangle(frame, (5, 5), (200, 110), color, 2)
             
-            # Draw target area in center
-            cv2.rectangle(frame, (280, 200), (360, 280), (0, 255, 0), 2)
-            cv2.putText(frame, "Target Area", (290, 195), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
-            cv2.line(frame, (0, 240), (640, 240), (255, 255, 0), 1)
+            # Ensure frame is properly formatted before encoding
+            if frame is not None and frame.size > 0:
+                # Encode and send frame
+                ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                if ret:
+                    frame_bytes = buffer.tobytes()
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
             
-        elif current_mode == "patrol":
-            if patrol_system.active:
-                # Update car position (in real implementation, get from odometry)
-                # For now, simulate position
-                frame_counter += 1
-                if frame_counter % 30 == 0:
-                    patrol_system.current_segment = (patrol_system.current_segment + 1) % len(patrol_system.patrol_path)
-                
-                left_speed, right_speed = patrol_system.get_patrol_commands(0, 0, 0)
-                PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
-                
-                cv2.putText(frame, "PATROL MODE", (10, 30), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-                cv2.putText(frame, f"State: {patrol_system.patrol_state}", (10, 50), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-                cv2.putText(frame, f"Segment: {patrol_system.current_segment + 1}/{len(patrol_system.patrol_path)}", 
-                           (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-            else:
-                cv2.putText(frame, "PATROL MODE (INACTIVE)", (10, 30), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-                
-        elif current_mode == "waypoint_nav":
-            if path_planner.navigation_active:
-                left_speed, right_speed = path_planner.get_navigation_commands()
-                PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
-                
-                cv2.putText(frame, "WAYPOINT NAVIGATION", (10, 30), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-                cv2.putText(frame, f"State: {path_planner.navigation_state}", (10, 50), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-                
-                current_wp = path_planner.get_current_waypoint()
-                if current_wp:
-                    cv2.putText(frame, f"Target: ({current_wp.x}, {current_wp.y})", (10, 70), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-                    cv2.putText(frame, f"Distance: {path_planner.calculate_distance(current_wp):.1f}cm", 
-                               (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-            else:
-                cv2.putText(frame, "WAYPOINT NAVIGATION (INACTIVE)", (10, 30), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-                           
-        elif current_mode == "obstacle_avoid":
-            avoidance_cmd = path_planner.obstacle_avoidance.get_avoidance_commands()
-            if avoidance_cmd is not None:
-                left_speed, right_speed = avoidance_cmd
-                PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
-            
-            cv2.putText(frame, "OBSTACLE AVOIDANCE MODE", (10, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-            
-            obstacle_info = path_planner.obstacle_avoidance.get_visualization_info()
-            cv2.putText(frame, f"State: {obstacle_info['state']}", (10, 50), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
-            
-            if obstacle_info['obstacle']['detected']:
-                side = obstacle_info['obstacle']['side']
-                cv2.putText(frame, f"OBSTACLE DETECTED - {side.upper()}!", (10, 70), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-                cv2.putText(frame, f"Front: {obstacle_info['obstacle']['front_distance']:.1f}cm", 
-                           (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-                           
-        elif current_mode == "manual":
-            cv2.putText(frame, "MANUAL MODE", (10, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                       
-        elif current_mode == "mission":
-            cv2.putText(frame, f"MISSION: {current_mission.name if current_mission else 'None'}", 
-                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-        
-        # Display speed info
-        cv2.putText(frame, f"Speed Setting: {current_speed}", (10, 60), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
-        # Display mode indicator
-        mode_colors = {
-            "manual": (255, 255, 255),
-            "ball_follow": (0, 255, 0),
-            "waypoint_nav": (255, 255, 0),
-            "patrol": (255, 255, 0),
-            "obstacle_avoid": (0, 255, 255),
-            "mission": (0, 255, 255)
-        }
-        color = mode_colors.get(current_mode, (255, 255, 255))
-        cv2.rectangle(frame, (5, 5), (200, 110), color, 2)
-        
-        # Encode and send frame
-        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-        if not ret:
+        except Exception as e:
+            print(f"Video stream error: {e}")
+            # Don't break the loop, just continue
+            time.sleep(0.05)
             continue
         
-        frame_bytes = buffer.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-        
-        time.sleep(0.033)
+        time.sleep(0.033)  # ~30 FPS
 
 @app.route('/video_feed')
 def video_feed():
     return Response(generate_frames(),
                    mimetype='multipart/x-mixed-replace; boundary=frame')
+                   
+# ================= Ultrasonic Routes =================
+
+@app.route("/api/ultrasonic/distance", methods=["GET"])
+def get_ultrasonic_distance():
+    """Get current ultrasonic distance reading"""
+    distance = ultrasonic_sensor.get_distance()
+    if distance is not None:
+        return jsonify({
+            "distance": distance,
+            "status": "critical" if distance < 10 else "warning" if distance < 30 else "safe"
+        })
+    return jsonify({"distance": None, "status": "error"})
+
+@app.route("/api/ultrasonic/stream")
+def ultrasonic_stream():
+    """SSE stream for real-time distance updates"""
+    def generate():
+        while True:
+            distance = ultrasonic_sensor.get_distance()
+            data = {
+                "distance": distance,
+                "status": "critical" if distance and distance < 10 else "warning" if distance and distance < 30 else "safe"
+            }
+            yield f"data: {json.dumps(data)}\n\n"
+            time.sleep(0.2)
+    return Response(generate(), mimetype='text/event-stream')
                    
 # ================= Main Entry Point =================
 if __name__ == "__main__":
@@ -1203,7 +1290,7 @@ if __name__ == "__main__":
     print("  ⚽ Ball Following - Track and follow orange ball")
     print("  📍 Waypoint Navigation - Follow predefined path with obstacle avoidance")
     print("  🚓 Patrol Mission - Autonomous patrol route with collision avoidance")
-    print("  🚧 Obstacle Avoidance - Pure obstacle detection and avoidance")
+    print("  🛡️ Obstacle Avoidance - Pure obstacle detection and avoidance")
     print("  🔍 Ball Hunt Mission - Search for orange ball")
     print("\nHardware Status:")
     print(f"  📹 Camera: {'Available' if camera_available else 'Not Available'}")

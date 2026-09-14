@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Robot Chat</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0d1117; color: #e6edf3; height: 100vh; display: flex; flex-direction: column; }
+        
+        /* Header */
+        .header { background: #161b22; padding: 12px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .header h1 { font-size: 18px; color: #f0f6fc; display: flex; align-items: center; gap: 10px; }
+        .header h1 span { font-size: 14px; color: #8b949e; font-weight: normal; }
+        .header .status { font-size: 12px; padding: 4px 14px; border-radius: 20px; }
+        .status.online { background: #238636; color: #fff; }
+        .status.offline { background: #da3633; color: #fff; }
+        .status.thinking { background: #ffa657; color: #0d1117; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+        
+        /* Camera View */
+        .camera-section { background: #161b22; padding: 10px; border-bottom: 1px solid #30363d; text-align: center; position: relative; }
+        .camera-section img { max-width: 100%; max-height: 300px; border-radius: 8px; background: #0d1117; border: 1px solid #30363d; }
+        .camera-overlay { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.7); padding: 4px 12px; border-radius: 12px; font-size: 11px; color: #8b949e; }
+        .camera-buttons { margin-top: 10px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+        .camera-buttons button { padding: 6px 16px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+        .camera-buttons button:hover { transform: scale(1.02); }
+        .btn-analyze { background: #238636; color: #fff; }
+        .btn-analyze:hover { background: #2ea043; }
+        .btn-capture { background: #1f6feb; color: #fff; }
+        .btn-capture:hover { background: #388bfd; }
+        .btn-vision { background: #d29922; color: #0d1117; }
+        .btn-vision:hover { background: #e3b341; }
+        
+        /* Tools Row */
+        .tools-row { padding: 8px 20px; background: #0d1117; border-bottom: 1px solid #30363d; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .tools-row button { background: #21262d; color: #8b949e; border: 1px solid #30363d; border-radius: 16px; padding: 4px 14px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+        .tools-row button:hover { background: #30363d; color: #f0f6fc; }
+        .tools-row .category { color: #8b949e; font-size: 11px; margin-right: 4px; }
+        
+        /* Chat Container */
+        .chat-container { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; }
+        .message { max-width: 85%; padding: 10px 16px; border-radius: 12px; line-height: 1.5; font-size: 14px; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .message.user { align-self: flex-end; background: #238636; color: #fff; border-bottom-right-radius: 4px; }
+        .message.assistant { align-self: flex-start; background: #21262d; color: #e6edf3; border-bottom-left-radius: 4px; }
+        .message .timestamp { font-size: 10px; opacity: 0.5; margin-top: 4px; }
+        .message .tools { font-size: 12px; background: #161b22; padding: 8px 10px; border-radius: 6px; margin-top: 6px; font-family: monospace; border: 1px solid #30363d; }
+        .message .tools .success { color: #3fb950; }
+        .message .tools .error { color: #f85149; }
+        .message .image-preview { max-width: 200px; max-height: 150px; border-radius: 6px; margin-top: 6px; border: 1px solid #30363d; }
+        
+        .typing { display: none; padding: 8px 16px; color: #8b949e; font-size: 14px; align-self: flex-start; }
+        .typing.active { display: block; }
+        .typing::after { content: '...'; animation: dots 1.5s steps(4) infinite; }
+        @keyframes dots { 0%, 20% { content: ''; } 40%, 60% { content: '.'; } 80%, 100% { content: '..'; } }
+        
+        /* Input Area */
+        .input-area { padding: 12px 20px; background: #161b22; border-top: 1px solid #30363d; display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+        .input-area textarea { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px 14px; color: #e6edf3; resize: none; font-family: inherit; font-size: 14px; min-height: 44px; max-height: 120px; }
+        .input-area textarea:focus { outline: none; border-color: #58a6ff; }
+        .input-area .input-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+        .input-area .input-actions button { background: #21262d; color: #8b949e; border: 1px solid #30363d; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 16px; transition: all 0.2s; }
+        .input-area .input-actions button:hover { background: #30363d; color: #f0f6fc; }
+        .input-area .input-actions button.send { background: #238636; color: #fff; border: none; padding: 8px 20px; font-weight: 600; }
+        .input-area .input-actions button.send:hover { background: #2ea043; }
+        .input-area .input-actions button.send:disabled { opacity: 0.5; cursor: not-allowed; }
+        .input-area .image-upload { display: none; }
+        .input-area .image-preview { max-width: 80px; max-height: 60px; border-radius: 4px; border: 1px solid #30363d; margin-left: 4px; }
+        
+        /* Responsive */
+        @media (max-width: 600px) {
+            .header h1 { font-size: 16px; }
+            .tools-row { padding: 6px 12px; gap: 4px; }
+            .tools-row button { font-size: 10px; padding: 3px 10px; }
+            .message { max-width: 95%; font-size: 13px; }
+            .input-area { padding: 8px 12px; }
+            .camera-section img { max-height: 200px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ================= HEADER ================= -->
+<div class="header">
+    <h1>
+        🤖 AI Robot Assistant
+        <span>v2.0 with Vision</span>
+    </h1>
+    <div>
+        <span class="status online" id="statusBadge">● Online</span>
+        <span style="margin-left: 10px; font-size: 13px; color: #8b949e;" id="modelBadge">llama3.2:3b</span>
+    </div>
+</div>
+
+<!-- ================= CAMERA VIEW ================= -->
+<div class="camera-section">
+    <img id="cameraFeed" src="/video_feed" alt="Camera Feed">
+    <div class="camera-overlay">📹 Live Camera</div>
+    <div class="camera-buttons">
+        <button class="btn-analyze" onclick="analyzeCamera()">🤖 What do you see?</button>
+        <button class="btn-capture" onclick="captureAndSend()">📸 Capture & Ask</button>
+        <button class="btn-vision" onclick="detectObject()">🔍 Detect Object</button>
+        <button class="btn-vision" onclick="checkObstacles()">🚧 Check Obstacles</button>
+    </div>
+</div>
+
+<!-- ================= TOOLS ROW ================= -->
+<div class="tools-row">
+    <span class="category">⚡ Quick Commands:</span>
+    <button onclick="quickCommand('move forward')">⬆️ Forward</button>
+    <button onclick="quickCommand('move backward')">⬇️ Backward</button>
+    <button onclick="quickCommand('turn left')">↺ Left</button>
+    <button onclick="quickCommand('turn right')">↻ Right</button>
+    <button onclick="quickCommand('stop')">⏹ Stop</button>
+    <button onclick="quickCommand('follow the ball')">⚽ Follow Ball</button>
+    <button onclick="quickCommand('start patrol')">🚓 Patrol</button>
+    <button onclick="quickCommand('beep')">🔊 Beep</button>
+    <button onclick="quickCommand('what do you see')">👁️ Vision</button>
+    <button onclick="clearHistory()" style="color: #da3633;">🗑️ Clear</button>
+</div>
+
+<!-- ================= CHAT CONTAINER ================= -->
+<div class="chat-container" id="chatContainer">
+    <div class="message assistant">
+        👋 Hello! I'm your AI robot assistant with vision capabilities.
+        <br><br>
+        <strong>I can:</strong>
+        <br>• 👁️ See through the camera and describe what I see
+        <br>• 🎯 Detect objects and navigate to them
+        <br>• 🚧 Check for obstacles
+        <br>• 🚗 Control the robot's movements
+        <br><br>
+        <strong>Try:</strong>
+        <br>• "What do you see?" - Captures camera
+        <br>• "Find the ball" - Detects objects
+        <br>• "Move forward" - Controls the robot
+        <div class="timestamp">Just now</div>
+    </div>
+    <div class="typing" id="typingIndicator">AI is thinking</div>
+</div>
+
+<!-- ================= INPUT AREA ================= -->
+<div class="input-area">
+    <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; width: 100%;">
+        <textarea id="messageInput" placeholder="Type a command, or use quick buttons..." rows="1" onkeydown="handleKeyDown(event)"></textarea>
+        <div class="input-actions">
+            <button onclick="document.getElementById('imageInput').click()" title="Upload Image">📷</button>
+            <input type="file" id="imageInput" class="image-upload" accept="image/*" onchange="handleImageUpload(event)">
+            <button onclick="captureFromCamera()" title="Capture from Camera">📸</button>
+            <button class="send" onclick="sendMessage()" id="sendBtn">Send</button>
+        </div>
+    </div>
+    <div id="uploadPreview" style="display: flex; gap: 4px; flex-wrap: wrap; width: 100%; margin-top: 4px;"></div>
+</div>
+
+<!-- ================= JAVASCRIPT ================= -->
+<script>
+    // ================= STATE =================
+    let currentImage = null;
+    let isProcessing = false;
+    let conversationHistory = [];
+
+    // ================= DOM REFS =================
+    const chatContainer = document.getElementById('chatContainer');
+    const messageInput = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const typingIndicator = document.getElementById('typingIndicator');
+    const statusBadge = document.getElementById('statusBadge');
+    const modelBadge = document.getElementById('modelBadge');
+
+    // ================= KEYBOARD SHORTCUTS =================
+    function handleKeyDown(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    }
+
+    // ================= IMAGE UPLOAD =================
+    function handleImageUpload(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            currentImage = event.target.result.split(',')[1];
+            const preview = document.createElement('img');
+            preview.className = 'image-preview';
+            preview.src = event.target.result;
+            preview.title = 'Click to remove';
+            preview.onclick = function() { 
+                this.remove(); 
+                currentImage = null; 
+                document.getElementById('imageInput').value = '';
+            };
+            document.getElementById('uploadPreview').appendChild(preview);
+            document.getElementById('messageInput').focus();
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    }
+
+    // ================= CAPTURE FROM CAMERA =================
+    function captureFromCamera() {
+        const video = document.getElementById('cameraFeed');
+        if (!video) {
+            addMessage('❌ Camera feed not available', 'assistant');
+            return;
+        }
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = 640;
+        canvas.height = 480;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+        currentImage = imageData.split(',')[1];
+        
+        const preview = document.createElement('img');
+        preview.className = 'image-preview';
+        preview.src = imageData;
+        preview.title = 'Click to remove';
+        preview.onclick = function() { 
+            this.remove(); 
+            currentImage = null; 
+        };
+        document.getElementById('uploadPreview').appendChild(preview);
+        
+        addMessage('📸 Camera captured! Ask me what I see.', 'assistant');
+        document.getElementById('messageInput').focus();
+    }
+
+    // ================= VISION QUICK ACTIONS =================
+    function analyzeCamera() {
+        document.getElementById('messageInput').value = "What do you see through the camera?";
+        sendMessage();
+    }
+
+    function detectObject() {
+        document.getElementById('messageInput').value = "Find a ball in the camera view";
+        sendMessage();
+    }
+
+    function checkObstacles() {
+        document.getElementById('messageInput').value = "Are there any obstacles in front of the robot?";
+        sendMessage();
+    }
+
+    function captureAndSend() {
+        const video = document.getElementById('cameraFeed');
+        if (!video) {
+            addMessage('❌ Camera feed not available', 'assistant');
+            return;
+        }
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = 640;
+        canvas.height = 480;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+        currentImage = imageData.split(',')[1];
+        
+        const preview = document.createElement('img');
+        preview.className = 'image-preview';
+        preview.src = imageData;
+        preview.title = 'Click to remove';
+        preview.onclick = function() { 
+            this.remove(); 
+            currentImage = null; 
+        };
+        document.getElementById('uploadPreview').appendChild(preview);
+        
+        document.getElementById('messageInput').value = "What do you see in this image?";
+        sendMessage();
+    }
+
+    // ================= SEND MESSAGE =================
+    async function sendMessage() {
+        if (isProcessing) return;
+        
+        const message = messageInput.value.trim();
+        if (!message && !currentImage) {
+            messageInput.focus();
+            return;
+        }
+        
+        const displayMessage = message || "Analyze the image";
+        addMessage(displayMessage, 'user');
+        
+        if (currentImage) {
+            const previews = document.querySelectorAll('#uploadPreview .image-preview');
+            previews.forEach(el => el.remove());
+        }
+        
+        messageInput.value = '';
+        isProcessing = true;
+        sendBtn.disabled = true;
+        typingIndicator.classList.add('active');
+        statusBadge.className = 'status thinking';
+        statusBadge.textContent = '● Thinking...';
+        
+        try {
+            const payload = { command: message || "What do you see in this image?" };
+            if (currentImage) {
+                payload.image = currentImage;
+            }
+            
+            const response = await fetch('/ai/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            const data = await response.json();
+            
+            typingIndicator.classList.remove('active');
+            
+            if (data.success) {
+                let responseText = data.response || '✅ Command processed';
+                addMessage(responseText, 'assistant');
+                
+                if (data.tool_calls && data.tool_calls.length > 0) {
+                    let toolInfo = '🔧 Tools executed:\n';
+                    data.tool_calls.forEach(t => {
+                        const status = t.result && t.result.success ? '✅' : '❌';
+                        toolInfo += `${status} ${t.tool}`;
+                        if (t.result && t.result.result) {
+                            toolInfo += `: ${t.result.result}`;
+                        }
+                        toolInfo += '\n';
+                    });
+                    addMessage(toolInfo, 'assistant');
+                }
+            } else {
+                addMessage('❌ Error: ' + (data.error || 'Unknown error'), 'assistant');
+            }
+            
+            currentImage = null;
+            
+        } catch (error) {
+            typingIndicator.classList.remove('active');
+            addMessage('❌ Connection error: ' + error.message, 'assistant');
+        }
+        
+        isProcessing = false;
+        sendBtn.disabled = false;
+        statusBadge.className = 'status online';
+        statusBadge.textContent = '● Online';
+        messageInput.focus();
+    }
+
+    // ================= ADD MESSAGE =================
+    function addMessage(text, role) {
+        const container = document.getElementById('chatContainer');
+        const div = document.createElement('div');
+        div.className = 'message ' + role;
+        div.innerText = text;
+        const time = document.createElement('div');
+        time.className = 'timestamp';
+        time.innerText = new Date().toLocaleTimeString();
+        div.appendChild(time);
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    // ================= QUICK COMMAND =================
+    function quickCommand(cmd) {
+        document.getElementById('messageInput').value = cmd;
+        sendMessage();
+    }
+
+    // ================= CLEAR HISTORY =================
+    function clearHistory() {
+        if (confirm('Clear chat history?')) {
+            const container = document.getElementById('chatContainer');
+            const messages = container.querySelectorAll('.message');
+            messages.forEach(msg => msg.remove());
+            fetch('/ai/history/clear', { method: 'POST' })
+                .then(() => {
+                    addMessage('🗑️ Chat history cleared', 'assistant');
+                })
+                .catch(() => {});
+        }
+    }
+
+    // ================= CHECK STATUS =================
+    async function checkStatus() {
+        try {
+            const response = await fetch('/ai/status');
+            const data = await response.json();
+            if (data.status === 'ready') {
+                statusBadge.className = 'status online';
+                statusBadge.textContent = '● Online';
+                if (data.agent && data.agent.llm_model) {
+                    modelBadge.textContent = data.agent.llm_model;
+                }
+            } else {
+                statusBadge.className = 'status offline';
+                statusBadge.textContent = '● Offline';
+            }
+        } catch (e) {
+            statusBadge.className = 'status offline';
+            statusBadge.textContent = '● Offline';
+        }
+    }
+
+    // ================= AUTO-RESIZE TEXTAREA =================
+    messageInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+
+    // ================= POLL STATUS =================
+    setInterval(checkStatus, 30000);
+    checkStatus();
+
+    // ================= ENTER TO SEND (WITH SHIFT FOR NEWLINE) =================
+    messageInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    console.log('🤖 AI Robot Chat loaded!');
+    console.log('📷 Vision enabled - you can upload images or capture from camera');
+</script>
+
+</body>
+</html>

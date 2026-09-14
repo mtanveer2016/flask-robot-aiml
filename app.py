@@ -1,12 +1,10 @@
-
+# ================= IMPORTS =================
 from flask import Flask, render_template, jsonify, request, Response
-from prometheus_flask_exporter import PrometheusMetrics
-from prometheus_client import Gauge
-# Import Freenove ADC module for battery reading
-from adc import ADC
 from motor import Ordinary_Car
 from buzzer import Buzzer
 from led import Led
+from ai_routes import ai_bp, init_agent, register_robot_tools
+from ai_modules import RobotAgent
 import threading
 import time
 import cv2
@@ -17,158 +15,172 @@ from collections import deque
 import heapq
 #from picamera2 import Picamera2
 import random
-from enum import Enum
+import ultrasonic
+import sys
+import locale
 
-
-# Get the host IP from environment variable
-import os
-#PI_HOST = os.environ.get('PIGPIO_ADDR', '10.120.14.234')
-#buzzer = Buzzer(pi_host=PI_HOST)
-
-# Use localhost if environment variable is not set
-PI_HOST = os.environ.get('PIGPIO_ADDR', 'localhost')
-PI_PORT = int(os.environ.get('PIGPIO_PORT', 8889))
-
+# ================= FLASK APP =================
+try:
+    locale.setlocale(locale.LC_ALL, 'en_GB.UTF-8')
+except locale.Error:
+    pass
 
 app = Flask(__name__)
-metrics = PrometheusMetrics(app)
 
-# ================= Battery Monitoring =================
-
-# Battery metrics for Prometheus
-battery_voltage_gauge = Gauge('robot_battery_voltage', 
-                               'Current battery voltage in volts')
-battery_percent_gauge = Gauge('robot_battery_percent', 
-                               'Current battery percentage remaining')
-def get_battery_reading():
-    """Read actual battery voltage from ADC"""
-    try:
-        adc = ADC()
-        pcb_version = adc.pcb_version
-        voltage = adc.read_adc(2) * (3 if pcb_version == 1 else 2)
-        
-        # Calculate percentage for 2x18650 batteries
-        min_voltage = 6.0   # Empty
-        max_voltage = 8.4   # Fully charged
-        
-        if voltage >= max_voltage:
-            percentage = 100.0
-        elif voltage <= min_voltage:
-            percentage = 0.0
-        else:
-            percentage = ((voltage - min_voltage) / (max_voltage - min_voltage)) * 100
-        
-        return round(voltage, 2), round(percentage, 1)
-    except Exception as e:
-        print(f"Battery read error: {e}")
-        return 7.4, 50.0  # Default fallback values
-
-def update_battery_metrics():
-    """Background thread to update battery metrics"""
-    while True:
-        voltage, percentage = get_battery_reading()
-        battery_voltage_gauge.set(voltage)  # Use the gauge variable
-        battery_percent_gauge.set(percentage)  # Use the gauge variable
-        print(f"Battery updated: {voltage}V ({percentage}%)")
-        time.sleep(30)  # Update every 30 seconds
-        
-def update_battery():
-    """Simulate battery updates (replace with actual ADC reading)"""
-    voltage = 7.58
-    percentage = 65.8
-    battery_voltage_gauge.set(voltage)
-    battery_percent_gauge.set(percentage)
-    print(f"Battery: {voltage}V ({percentage}%)")
-    threading.Timer(30, update_battery).start()
+# ================= ROBOT CONTROLLER CLASS =================
+class RobotController:
+    """Wrapper for robot control functions for the AI agent"""
     
-# Start battery updates
-update_battery()
+    def __init__(self, pwm, buzzer, led):
+        self.pwm = pwm
+        self.buzzer = buzzer
+        self.led = led
+        self.current_mode = "manual"
+    
+    def forward(self, speed=50):
+        speed_scaled = int((speed / 100) * 2000)
+        self.pwm.set_motor_model(speed_scaled, speed_scaled, speed_scaled, speed_scaled)
+    
+    def backward(self, speed=50):
+        speed_scaled = int((speed / 100) * 2000)
+        self.pwm.set_motor_model(-speed_scaled, -speed_scaled, -speed_scaled, -speed_scaled)
+    
+    def turn_left(self, angle=45):
+        self.pwm.set_motor_model(-500, -500, 500, 500)
+        time.sleep(angle / 90)
+        self.stop()
+    
+    def turn_right(self, angle=45):
+        self.pwm.set_motor_model(500, 500, -500, -500)
+        time.sleep(angle / 90)
+        self.stop()
+    
+    def stop(self):
+        self.pwm.set_motor_model(0, 0, 0, 0)
+    
+    def beep(self, duration=0.2):
+        self.buzzer.set_state(True)
+        time.sleep(duration)
+        self.buzzer.set_state(False)
+    
+    def set_led(self, color):
+        colors = {
+            'red': (255, 0, 0),
+            'green': (0, 255, 0),
+            'blue': (0, 0, 255),
+            'yellow': (255, 255, 0),
+            'white': (255, 255, 255),
+            'off': (0, 0, 0)
+        }
+        if color in colors:
+            r, g, b = colors[color]
+            self.led.ledIndex(0xFF, r, g, b)
+    
+    def start_ball_follow(self):
+        global current_mode
+        current_mode = "ball_follow"
+    
+    def start_patrol(self, shape="square"):
+        global current_mode, patrol_system
+        patrol_system.generate_patrol_path(shape)
+        patrol_system.active = True
+        current_mode = "patrol"
 
-@app.route('/health')
-def health():
-    return "Robot OK"
-
-@app.route('/metrics')
-def metrics_endpoint():
-    return metrics.expose_metrics()
-
-# Start the background thread
-battery_thread = threading.Thread(target=update_battery_metrics, daemon=True)
-battery_thread.start()
-
-
-# ================= Hardware Initialization =================
+# ================= HARDWARE INITIALIZATION =================
+print("Initializing hardware...")
 PWM = Ordinary_Car()
 buzzer = Buzzer()
 led = Led()
+print("✅ Hardware initialized")
 
-# ================= Global State =================
+# ================= ULTRASONIC SENSOR WRAPPER =================
+class UltrasonicSensor:
+    """Wrapper for the ultrasonic sensor with error handling"""
+    
+    def __init__(self):
+        try:
+            self.sensor = ultrasonic.Ultrasonic()
+            self.available = True
+            print("✅ Ultrasonic sensor initialized")
+        except Exception as e:
+            print(f"❌ Ultrasonic sensor error: {e}")
+            self.available = False
+    
+    def get_distance(self):
+        """Get distance in cm, returns None if error"""
+        if not self.available:
+            return None
+        try:
+            distance = self.sensor.get_distance()
+            if distance and 2 <= distance <= 400:
+                return round(distance, 1)
+            return None
+        except Exception as e:
+            print(f"Ultrasonic read error: {e}")
+            return None
+
+# Create ultrasonic sensor instance
+ultrasonic_sensor = UltrasonicSensor()
+
+# ================= AI AGENT INITIALIZATION =================
+print("Initializing AI Agent...")
+
+from ai_modules.vision.camera_capture import CameraCapture
+ai_camera = CameraCapture()
+
+robot_controller = RobotController(PWM, buzzer, led)
+ai_agent = init_agent(camera_instance=ai_camera)
+register_robot_tools(ai_agent, robot_controller)
+app.register_blueprint(ai_bp)
+
+print(f"✅ AI Agent initialized")
+print(f"   - LLM: {ai_agent.llm.model}")
+print(f"   - Tools available: {ai_agent.tools.get_tool_names()}")
+
+# ================= GLOBAL STATE =================
 current_speed = 1000
 is_moving = False
 current_mode = "manual"  # manual, ball_follow, waypoint_nav, patrol, obstacle_avoid
 autonomous_active = False
 current_mission = None
 
-
-
-
-
-
 # ================= ENHANCED BALL FOLLOWING SYSTEM =================
-
 class ImprovedBallDetector:
     """Enhanced ball detector with better tracking and prediction"""
     
     def __init__(self):
-        # Orange color range in HSV (adjust these values)
         self.lower_orange = np.array([5, 100, 100])
         self.upper_orange = np.array([15, 255, 255])
-        
-        # Alternative color ranges for different lighting
         self.lower_orange2 = np.array([0, 120, 120])
         self.upper_orange2 = np.array([20, 255, 255])
         
-        # Ball tracking variables
         self.ball_position = (320, 240)
         self.ball_detected = False
         self.ball_radius = 0
         self.frame_center = (320, 240)
         
-        # Position history for smoothing
         self.position_history = deque(maxlen=5)
         self.radius_history = deque(maxlen=5)
         
-        # Prediction for lost ball
         self.predicted_x = 320
         self.last_seen_time = 0
         self.ball_velocity_x = 0
         
-        # Frame dimensions
         self.frame_width = 640
         self.frame_height = 480
-        
-        # Tracking confidence
         self.confidence = 0
         
     def detect_ball(self, frame):
-        """Enhanced ball detection with multiple techniques"""
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         
-        # Mask 1: Orange range
         mask1 = cv2.inRange(hsv, self.lower_orange, self.upper_orange)
-        
-        # Mask 2: Wider orange range
         mask2 = cv2.inRange(hsv, self.lower_orange2, self.upper_orange2)
-        
-        # Combine masks
         mask = cv2.bitwise_or(mask1, mask2)
         
-        # Apply morphological operations to clean up the mask
         kernel = np.ones((5, 5), np.uint8)
         mask = cv2.erode(mask, kernel, iterations=2)
         mask = cv2.dilate(mask, kernel, iterations=3)
         
-        # Find contours
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         self.ball_detected = False
@@ -178,7 +190,6 @@ class ImprovedBallDetector:
         if contours:
             for contour in contours:
                 area = cv2.contourArea(contour)
-                
                 if area < 100:
                     continue
                     
@@ -332,6 +343,7 @@ class BallFollowerPID:
         self.prev_speed_error = 0
         self.speed_integral = 0
 
+# ================= SMART BALL FOLLOWER (ORIGINAL WORKING VERSION) =================
 class SmartBallFollower:
     """Complete ball following system with search patterns"""
     
@@ -393,8 +405,6 @@ class SmartBallFollower:
                 if abs(self.search_angle) > 180:
                     self.search_direction *= -1
                 
-                # Calculate rotation speeds
-                # One wheel forward, one backward = rotation in place
                 base_speed = 300
                 turn = int(self.search_angle / 2)
                 
@@ -418,315 +428,38 @@ class SmartBallFollower:
         
         return frame, motor_commands
 
-# Initialize ball follower
+# Initialize ball follower (ORIGINAL - no ultrasonic)
 ball_follower = SmartBallFollower()
 
-
-# ============LED DANCE SYSTEM =================
-
-class DancePattern(Enum):
-    RAINBOW = "rainbow"
-    STROBE = "strobe"
-    BREATHING = "breathing"
-    RANDOM = "random"
-    CHASE = "chase"
-    HEARTBEAT = "heartbeat"
-    DISCO = "disco"
-
-class LEDDanceController:
-    """Controls LED dance patterns with optional music sync"""
-    
-    def __init__(self, led_instance):
-        self.led = led_instance
-        self.is_dancing = False
-        self.dance_thread = None
-        self.current_pattern = DancePattern.RAINBOW
-        self.bpm = 120  # Beats per minute
-        self.brightness = 255
-        
-        # Colors for patterns
-        self.colors = [
-            (255, 0, 0),    # Red
-            (0, 255, 0),    # Green
-            (0, 0, 255),    # Blue
-            (255, 255, 0),  # Yellow
-            (255, 0, 255),  # Magenta
-            (0, 255, 255),  # Cyan
-            (255, 255, 255) # White
-        ]
-        
-        self.current_color_index = 0
-        
-    def start_dance(self, pattern="rainbow", bpm=120, duration=None):
-        """Start LED dance with specified pattern"""
-        if self.is_dancing:
-            self.stop_dance()
-            
-        self.current_pattern = DancePattern(pattern.lower())
-        self.bpm = bpm
-        self.is_dancing = True
-        
-        self.dance_thread = threading.Thread(target=self._dance_loop, args=(duration,))
-        self.dance_thread.daemon = True
-        self.dance_thread.start()
-        
-        return True
-        
-    def stop_dance(self):
-        """Stop LED dance and turn off lights"""
-        self.is_dancing = False
-        if self.dance_thread:
-            self.dance_thread.join(timeout=0.5)
-        self.led.ledIndex(0xFF, 0, 0, 0)  # Turn off all LEDs
-        
-    def _dance_loop(self, duration=None):
-        """Main dance pattern loop"""
-        start_time = time.time()
-        
-        while self.is_dancing:
-            if duration and (time.time() - start_time) > duration:
-                break
-                
-            # Calculate delay based on BPM
-            delay = 60.0 / self.bpm
-            
-            if self.current_pattern == DancePattern.RAINBOW:
-                self._rainbow_pattern()
-            elif self.current_pattern == DancePattern.STROBE:
-                self._strobe_pattern()
-            elif self.current_pattern == DancePattern.BREATHING:
-                self._breathing_pattern()
-            elif self.current_pattern == DancePattern.RANDOM:
-                self._random_pattern()
-            elif self.current_pattern == DancePattern.CHASE:
-                self._chase_pattern()
-            elif self.current_pattern == DancePattern.HEARTBEAT:
-                self._heartbeat_pattern()
-            elif self.current_pattern == DancePattern.DISCO:
-                self._disco_pattern()
-                
-            time.sleep(delay)
-            
-        self.is_dancing = False
-        
-    def _rainbow_pattern(self):
-        """Cycle through rainbow colors"""
-        for i, color in enumerate(self.colors):
-            if not self.is_dancing:
-                break
-            brightness_factor = self.brightness / 255.0
-            r = int(color[0] * brightness_factor)
-            g = int(color[1] * brightness_factor)
-            b = int(color[2] * brightness_factor)
-            self.led.ledIndex(0xFF, r, g, b)
-            time.sleep(0.05)
-            
-    def _strobe_pattern(self):
-        """Fast flashing strobe effect"""
-        for _ in range(2):  # Double flash
-            if not self.is_dancing:
-                break
-            self.led.ledIndex(0xFF, 255, 255, 255)  # White full brightness
-            time.sleep(0.03)
-            self.led.ledIndex(0xFF, 0, 0, 0)  # Off
-            time.sleep(0.03)
-            
-    def _breathing_pattern(self):
-        """Smooth fade in and out"""
-        steps = 20
-        for i in range(steps):
-            if not self.is_dancing:
-                break
-            intensity = int((i / steps) * self.brightness)
-            self.led.ledIndex(0xFF, intensity, intensity, intensity)
-            time.sleep(0.02)
-        for i in range(steps):
-            if not self.is_dancing:
-                break
-            intensity = int(((steps - i) / steps) * self.brightness)
-            self.led.ledIndex(0xFF, intensity, intensity, intensity)
-            time.sleep(0.02)
-            
-    def _random_pattern(self):
-        """Random color flashes"""
-        random_color = random.choice(self.colors)
-        brightness_factor = self.brightness / 255.0
-        r = int(random_color[0] * brightness_factor)
-        g = int(random_color[1] * brightness_factor)
-        b = int(random_color[2] * brightness_factor)
-        self.led.ledIndex(0xFF, r, g, b)
-        
-    def _chase_pattern(self):
-        """LED chasing effect (if you have multiple LEDs)"""
-        # For single LED, simulate chase by rotating colors
-        self.current_color_index = (self.current_color_index + 1) % len(self.colors)
-        color = self.colors[self.current_color_index]
-        brightness_factor = self.brightness / 255.0
-        r = int(color[0] * brightness_factor)
-        g = int(color[1] * brightness_factor)
-        b = int(color[2] * brightness_factor)
-        self.led.ledIndex(0xFF, r, g, b)
-        
-    def _heartbeat_pattern(self):
-        """Simulate heartbeat: quick double pulse"""
-        # First beat
-        self.led.ledIndex(0xFF, 255, 0, 0)  # Red
-        time.sleep(0.1)
-        self.led.ledIndex(0xFF, 50, 0, 0)   # Dim red
-        time.sleep(0.1)
-        # Second beat
-        self.led.ledIndex(0xFF, 255, 0, 0)  # Red
-        time.sleep(0.1)
-        self.led.ledIndex(0xFF, 0, 0, 0)    # Off
-        
-    def _disco_pattern(self):
-        """Disco mode - random colors with faster timing"""
-        random_color = random.choice(self.colors)
-        brightness_factor = self.brightness / 255.0
-        r = int(random_color[0] * brightness_factor)
-        g = int(random_color[1] * brightness_factor)
-        b = int(random_color[2] * brightness_factor)
-        self.led.ledIndex(0xFF, r, g, b)
-        
-        # Sometimes add white flash
-        if random.random() < 0.3:
-            time.sleep(0.02)
-            self.led.ledIndex(0xFF, 255, 255, 255)
-            
-    def set_bpm(self, bpm):
-        """Set beats per minute for pattern timing"""
-        self.bpm = max(40, min(200, bpm))
-        
-    def set_brightness(self, brightness):
-        """Set brightness level (0-255)"""
-        self.brightness = max(0, min(255, brightness))
-
-# Initialize LED dance controller - RENAMED to avoid conflict
-led_dance_controller = LEDDanceController(led)
-
-# ================= LED DANCE ROUTES =================
-
-@app.route("/led-dance")
-def led_dance_page():
-    """LED Dance Party page"""
-    return render_template("led_dance.html")
-
-@app.route("/api/led/dance/start", methods=["POST"])
-def start_led_dance():
-    """Start LED dance with specified pattern"""
-    data = request.json
-    pattern = data.get("pattern", "rainbow")
-    bpm = data.get("bpm", 120)
-    duration = data.get("duration", None)
-    
-    # Validate pattern
-    valid_patterns = [p.value for p in DancePattern]
-    if pattern not in valid_patterns:
-        return jsonify({"success": False, "error": f"Invalid pattern. Choose from: {valid_patterns}"})
-    
-    success = led_dance_controller.start_dance(pattern, bpm, duration)
-    
-    return jsonify({
-        "success": success,
-        "pattern": pattern,
-        "bpm": bpm,
-        "duration": duration
-    })
-
-@app.route("/api/led/dance/stop", methods=["POST"])
-def stop_led_dance():
-    """Stop LED dance"""
-    led_dance_controller.stop_dance()
-    return jsonify({"success": True})
-
-@app.route("/api/led/dance/status", methods=["GET"])
-def get_led_dance_status():
-    """Get current LED dance status"""
-    return jsonify({
-        "is_dancing": led_dance_controller.is_dancing,
-        "current_pattern": led_dance_controller.current_pattern.value if led_dance_controller.current_pattern else None,
-        "bpm": led_dance_controller.bpm,
-        "brightness": led_dance_controller.brightness
-    })
-
-@app.route("/api/led/dance/patterns", methods=["GET"])
-def get_dance_patterns():
-    """Get list of available dance patterns"""
-    patterns = [{"id": p.value, "name": p.value.capitalize()} for p in DancePattern]
-    return jsonify({"patterns": patterns})
-
-@app.route("/api/led/dance/bpm/<int:bpm>", methods=["POST"])
-def set_dance_bpm(bpm):
-    """Set BPM for dance patterns"""
-    bpm = max(40, min(200, bpm))
-    led_dance_controller.set_bpm(bpm)
-    return jsonify({"success": True, "bpm": led_dance_controller.bpm})
-
-@app.route("/api/led/dance/brightness/<int:brightness>", methods=["POST"])
-def set_dance_brightness(brightness):
-    """Set brightness for LED dance"""
-    brightness = max(0, min(255, brightness))
-    led_dance_controller.set_brightness(brightness)
-    return jsonify({"success": True, "brightness": led_dance_controller.brightness})
-
-@app.route("/api/led/dance/sync-to-beats", methods=["POST"])
-def sync_to_beats():
-    """Synchronize LED dance to external beat detection"""
-    data = request.json
-    beat_detected = data.get("beat", False)
-    
-    if beat_detected and led_dance_controller.is_dancing:
-        # Flash white on beat
-        original_color = led_dance_controller.current_pattern
-        led.ledIndex(0xFF, 255, 255, 255)
-        threading.Timer(0.05, lambda: led_dance_controller.start_dance(original_color.value if original_color else "rainbow", led_dance_controller.bpm)).start()
-    
-    return jsonify({"success": True})
-
-
-
-# ================= OBSTACLE AVOIDANCE SYSTEM =================
-
+# ================= OBSTACLE DETECTOR =================
 class ObstacleDetector:
-    """Detects obstacles using ultrasonic sensor simulation"""
+    """Detects obstacles using REAL ultrasonic sensor"""
     
     def __init__(self):
-        self.front_distance = 100  # cm
+        self.front_distance = 100
         self.left_distance = 100
         self.right_distance = 100
         self.obstacle_detected = False
-        self.obstacle_side = None  # 'front', 'left', 'right'
-        self.safe_distance = 30  # cm
-        self.danger_distance = 20  # cm
+        self.obstacle_side = None
+        self.safe_distance = 30
+        self.danger_distance = 20
         
     def update_distances(self):
-        """Update distance readings (simulated - replace with actual sensors)"""
-        # In real implementation, read from ultrasonic sensors
-        # For now, simulate random obstacles for testing
-        # You should replace this with actual sensor readings
+        distance = ultrasonic_sensor.get_distance()
         
-        # Just for simulation - remove in production
-        if random.random() < 0.05:  # 5% chance of obstacle
-            self.front_distance = random.uniform(10, 40)
-            self.obstacle_detected = True
-            self.obstacle_side = 'front'
-        else:
-            self.front_distance = random.uniform(50, 200)
-            if random.random() < 0.02:
-                self.left_distance = random.uniform(15, 35)
-                self.right_distance = random.uniform(50, 200)
+        if distance is not None:
+            self.front_distance = distance
+            
+            if distance < self.safe_distance:
                 self.obstacle_detected = True
-                self.obstacle_side = 'left'
-            elif random.random() < 0.02:
-                self.right_distance = random.uniform(15, 35)
-                self.left_distance = random.uniform(50, 200)
-                self.obstacle_detected = True
-                self.obstacle_side = 'right'
+                self.obstacle_side = 'front'
             else:
-                self.left_distance = random.uniform(50, 200)
-                self.right_distance = random.uniform(50, 200)
                 self.obstacle_detected = False
                 self.obstacle_side = None
+        else:
+            self.front_distance = 100
+            self.obstacle_detected = False
+            self.obstacle_side = None
         
     def get_obstacle_status(self):
         return {
@@ -737,60 +470,35 @@ class ObstacleDetector:
             'right_distance': self.right_distance
         }
 
+# ================= OBSTACLE AVOIDANCE =================
 class ObstacleAvoidance:
-    """Implements obstacle avoidance behavior"""
-    
     def __init__(self):
         self.detector = ObstacleDetector()
-        self.state = "NORMAL"  # NORMAL, AVOIDING, TURNING
-        self.avoid_direction = None  # 'left', 'right'
+        self.state = "NORMAL"
+        self.avoid_direction = None
         self.avoid_start_time = 0
-        self.avoid_duration = 1.5  # seconds
+        self.avoid_duration = 1.5
         self.turn_speed = 400
         
     def get_avoidance_commands(self):
-        """Calculate motor commands for obstacle avoidance"""
         self.detector.update_distances()
         
         if not self.detector.obstacle_detected:
             self.state = "NORMAL"
-            return None  # No avoidance needed
+            return None
             
-        obstacle_status = self.detector.get_obstacle_status()
-        front_dist = obstacle_status['front_distance']
-        left_dist = obstacle_status['left_distance']
-        right_dist = obstacle_status['right_distance']
+        front_dist = self.detector.front_distance
         
-        # Check for immediate danger
         if front_dist < self.detector.danger_distance:
-            # Immediate stop and reverse
             self.state = "AVOIDING"
-            return (0, 0)  # Stop
+            return (0, 0)
             
         elif front_dist < self.detector.safe_distance:
-            # Obstacle in front - need to turn
             self.state = "TURNING"
-            
-            # Decide which way to turn based on side distances
-            if left_dist > right_dist:
-                self.avoid_direction = 'left'
-                return (-self.turn_speed, self.turn_speed)  # Turn left
-            else:
-                self.avoid_direction = 'right'
-                return (self.turn_speed, -self.turn_speed)  # Turn right
-                
-        elif left_dist < self.detector.safe_distance:
-            # Obstacle on left - turn right
-            self.state = "AVOIDING"
-            return (self.turn_speed, -self.turn_speed)
-            
-        elif right_dist < self.detector.safe_distance:
-            # Obstacle on right - turn left
-            self.state = "AVOIDING"
             return (-self.turn_speed, self.turn_speed)
         
         return None
-        
+    
     def get_visualization_info(self):
         return {
             'state': self.state,
@@ -798,54 +506,30 @@ class ObstacleAvoidance:
         }
 
 # ================= PATROL SYSTEM =================
-
 class PatrolMission:
-    """Autonomous patrol with obstacle avoidance"""
-    
     def __init__(self):
         self.patrol_path = []
         self.current_segment = 0
         self.active = False
-        self.patrol_state = "MOVING"  # MOVING, AVOIDING, RECHARGING
+        self.patrol_state = "MOVING"
         self.obstacle_avoidance = ObstacleAvoidance()
         self.last_position = (0, 0)
         self.stuck_counter = 0
         self.patrol_speed = 600
         
     def generate_patrol_path(self, shape="square"):
-        """Generate patrol waypoints"""
         if shape == "square":
-            self.patrol_path = [
-                (100, 0),    # Right
-                (100, 100),  # Down
-                (0, 100),    # Left
-                (0, 0)       # Back to start
-            ]
+            self.patrol_path = [(100, 0), (100, 100), (0, 100), (0, 0)]
         elif shape == "rectangle":
-            self.patrol_path = [
-                (150, 0),
-                (150, 80),
-                (0, 80),
-                (0, 0)
-            ]
+            self.patrol_path = [(150, 0), (150, 80), (0, 80), (0, 0)]
         elif shape == "zigzag":
-            self.patrol_path = [
-                (100, 0),
-                (100, 50),
-                (0, 100),
-                (0, 150),
-                (100, 200)
-            ]
-        else:  # circular
+            self.patrol_path = [(100, 0), (100, 50), (0, 100), (0, 150), (100, 200)]
+        else:
             self.patrol_path = [(50, 0), (35, 35), (0, 50), (-35, 35), 
                                (-50, 0), (-35, -35), (0, -50), (35, -35)]
-        
         self.current_segment = 0
         
     def get_patrol_commands(self, current_x, current_y, current_angle):
-        """Get motor commands for patrol with obstacle avoidance"""
-        
-        # First check for obstacles
         avoidance_cmd = self.obstacle_avoidance.get_avoidance_commands()
         if avoidance_cmd is not None:
             self.patrol_state = "AVOIDING"
@@ -856,50 +540,38 @@ class PatrolMission:
         if not self.patrol_path:
             return (0, 0)
             
-        # Get target waypoint
         target_x, target_y = self.patrol_path[self.current_segment]
-        
-        # Calculate distance to target
         dx = target_x - current_x
         dy = target_y - current_y
         distance = math.sqrt(dx*dx + dy*dy)
         
-        # Check if waypoint reached
         if distance < 15:
             self.current_segment = (self.current_segment + 1) % len(self.patrol_path)
-            return (0, 0)  # Slight pause at waypoints
+            return (0, 0)
             
-        # Calculate angle to target
         target_angle = math.degrees(math.atan2(dy, dx))
         angle_error = target_angle - current_angle
         
-        # Normalize angle error
         while angle_error > 180:
             angle_error -= 360
         while angle_error < -180:
             angle_error += 360
             
-        # Adjust speed based on distance and angle error
         if distance < 40:
             base_speed = 400
-        elif distance < 100:
-            base_speed = self.patrol_speed
         else:
             base_speed = self.patrol_speed
             
-        # Calculate turn
         turn_gain = 4
         turn = int(angle_error * turn_gain)
         turn = max(-400, min(400, turn))
         
-        # Calculate motor speeds
         left_speed = base_speed - turn
         right_speed = base_speed + turn
         
         return (left_speed, right_speed)
 
-# ================= WAYPOINT NAVIGATION WITH OBSTACLE AVOIDANCE =================
-
+# ================= WAYPOINT NAVIGATION =================
 class Waypoint:
     def __init__(self, x, y, action="navigate", description="", duration=0):
         self.x = x
@@ -918,7 +590,7 @@ class PathPlanner:
         self.car_theta = 0
         self.reached_threshold = 15
         self.obstacle_avoidance = ObstacleAvoidance()
-        self.navigation_state = "NORMAL"  # NORMAL, AVOIDING, RECOVERING
+        self.navigation_state = "NORMAL"
         self.avoid_timeout = 0
         self.recovery_path = []
         
@@ -946,13 +618,11 @@ class PathPlanner:
         return self.calculate_distance(waypoint) <= self.reached_threshold
     
     def get_navigation_commands(self):
-        """Get navigation commands with obstacle avoidance"""
         waypoint = self.get_current_waypoint()
         
         if not waypoint or not self.navigation_active:
             return 0, 0
         
-        # Check for obstacles
         avoidance_cmd = self.obstacle_avoidance.get_avoidance_commands()
         if avoidance_cmd is not None:
             self.navigation_state = "AVOIDING"
@@ -977,7 +647,6 @@ class PathPlanner:
         
         distance = self.calculate_distance(waypoint)
         
-        # Dynamic speed based on distance and angle error
         if distance < 30:
             base_speed = 350
         elif distance < 80:
@@ -985,7 +654,6 @@ class PathPlanner:
         else:
             base_speed = 700
             
-        # Reduce speed when turning sharply
         if abs(angle_error) > 45:
             base_speed = int(base_speed * 0.6)
         
@@ -1009,7 +677,7 @@ class PathPlanner:
             PWM.set_motor_model(0, 0, 0, 0)
             return False
 
-# ================= Mission System =================
+# ================= MISSION SYSTEM =================
 class Mission:
     def __init__(self, name):
         self.name = name
@@ -1073,7 +741,7 @@ path_planner = PathPlanner()
 patrol_system = PatrolMission()
 current_mission = None
 
-# ================= Camera Setup =================
+# ================= CAMERA SETUP =================
 try:
     picam2 = Picamera2()
     config = picam2.create_video_configuration(main={"size": (640, 480)})
@@ -1087,7 +755,6 @@ except Exception as e:
     print(f"Camera not available: {e}")
 
 # ================= FLASK ROUTES =================
-
 @app.route("/")
 def index():
     return render_template("autonomous_index.html")
@@ -1107,13 +774,8 @@ def autonomous():
 @app.route("/enhancedautonomous")
 def enhancedautonomous():
     return render_template("enhancedautonomous.html")
-    
-#@app.route("/led_dance")
-#def led_dance():
-#    return render_template("led_dance.html")
 
-
-# ================= Motor Control Routes =================
+# ================= MOTOR CONTROL ROUTES =================
 @app.route("/forward")
 def forward():
     global is_moving, current_mode
@@ -1179,8 +841,7 @@ def set_led(color):
         led.ledIndex(0xFF, r, g, b)
     return jsonify({"status": "ok", "color": color})
 
-# ================= Autonomous Mode Routes =================
-
+# ================= AUTONOMOUS MODE ROUTES =================
 @app.route("/api/mode/set", methods=["POST"])
 def set_mode():
     global current_mode, autonomous_active, ball_follower, patrol_system
@@ -1397,257 +1058,158 @@ def get_status():
         "patrol_state": patrol_system.patrol_state,
         "obstacle": obstacle_info
     })
-#===================Battery status routs ======================    
-     # Get battery status and update Prometheus gauges
-    voltage = get_battery_voltage()
-    percentage = calculate_battery_percentage(voltage)
-    
-    battery_voltage_gauge.set(voltage)
-    battery_percent_gauge.set(percentage)
-    
-    # Optional: Add battery info to your JSON response
-    # ... rest of your code ...
-    
-    return jsonify({
-        # ... your existing return values ...
-        "battery_voltage": voltage,
-        "battery_percentage": percentage
-    })
-    
-@app.route("/api/battery")
-def get_battery():
-    """Get current battery status"""
-    voltage = get_battery_voltage()
-    percentage = calculate_battery_percentage(voltage)
-    
-    return jsonify({
-        "voltage": voltage,
-        "percentage": percentage,
-        "status": "critical" if percentage < 20 else "low" if percentage < 30 else "good"
-    })   
-    
-    
-#===============LED DANCE ROUTES =================
-# Make sure this section appears ONLY ONCE in your app.py
 
-@app.route("/led_dance")
-def led_dance():
-    """LED Dance Party page"""
-    return render_template("led_dance.html")
-
-@app.route("/api/led/dance/start", methods=["POST"])
-def api_led_dance_start():
-    """Start LED dance with specified pattern"""
-    data = request.json
-    pattern = data.get("pattern", "rainbow")
-    bpm = data.get("bpm", 120)
-    duration = data.get("duration", None)
-    
-    # Validate pattern
-    valid_patterns = [p.value for p in DancePattern]
-    if pattern not in valid_patterns:
-        return jsonify({"success": False, "error": f"Invalid pattern. Choose from: {valid_patterns}"})
-    
-    success = led_dance_controller.start_dance(pattern, bpm, duration)
-    
-    return jsonify({
-        "success": success,
-        "pattern": pattern,
-        "bpm": bpm,
-        "duration": duration
-    })
-
-@app.route("/api/led/dance/stop", methods=["POST"])
-def api_led_dance_stop():
-    """Stop LED dance"""
-    led_dance_controller.stop_dance()
-    return jsonify({"success": True})
-
-@app.route("/api/led/dance/status", methods=["GET"])
-def api_led_dance_status():
-    """Get current LED dance status"""
-    return jsonify({
-        "is_dancing": led_dance_controller.is_dancing,
-        "current_pattern": led_dance_controller.current_pattern.value if led_dance_controller.current_pattern else None,
-        "bpm": led_dance_controller.bpm,
-        "brightness": led_dance_controller.brightness
-    })
-
-@app.route("/api/led/dance/patterns", methods=["GET"])
-def api_led_dance_patterns():
-    """Get list of available dance patterns"""
-    patterns = [{"id": p.value, "name": p.value.capitalize()} for p in DancePattern]
-    return jsonify({"patterns": patterns})
-
-@app.route("/api/led/dance/bpm/<int:bpm>", methods=["POST"])
-def api_led_dance_bpm(bpm):
-    """Set BPM for dance patterns"""
-    bpm = max(40, min(200, bpm))
-    led_dance_controller.set_bpm(bpm)
-    return jsonify({"success": True, "bpm": led_dance_controller.bpm})
-
-@app.route("/api/led/dance/brightness/<int:brightness>", methods=["POST"])
-def api_led_dance_brightness(brightness):
-    """Set brightness for LED dance"""
-    brightness = max(0, min(255, brightness))
-    led_dance_controller.set_brightness(brightness)
-    return jsonify({"success": True, "brightness": led_dance_controller.brightness})
-
-@app.route("/api/led/dance/sync-to-beats", methods=["POST"])
-def api_led_dance_sync():
-    """Synchronize LED dance to external beat detection"""
-    data = request.json
-    beat_detected = data.get("beat", False)
-    
-    if beat_detected and led_dance_controller.is_dancing:
-        # Flash white on beat
-        original_color = led_dance_controller.current_pattern
-        led.ledIndex(0xFF, 255, 255, 255)
-        threading.Timer(0.05, lambda: led_dance_controller.start_dance(
-            original_color.value if original_color else "rainbow", 
-            led_dance_controller.bpm
-        )).start()
-    
-    return jsonify({"success": True})
-
-
-
-# ================= Video Streaming =================
+# ================= VIDEO STREAMING =================
 def generate_frames():
     global current_mode, ball_follower, autonomous_active, path_planner, patrol_system
     
     frame_counter = 0
+    print("🎥 Video stream generator started!")
     
     while True:
-        if not camera_available:
-            frame = np.zeros((480, 640, 3), dtype=np.uint8)
-            cv2.putText(frame, "Camera Not Available", (50, 240), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-        else:
+        try:
+            if not camera_available:
+                frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                cv2.putText(frame, "Camera Not Available", (50, 240), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                cv2.putText(frame, "Check camera connection", (50, 280), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            else:
+                try:
+                    frame = picam2.capture_array()
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                    
+                    if frame is None or frame.size == 0:
+                        raise ValueError("Empty frame captured")
+                        
+                except Exception as e:
+                    print(f"Frame capture error: {e}")
+                    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                    cv2.putText(frame, "Camera Error", (50, 240), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    continue
+            
+            motor_commands = (0, 0)
+            
+            # Get ultrasonic reading for display
             try:
-                frame = picam2.capture_array()
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-            except Exception as e:
-                print(f"Frame capture error: {e}")
-                continue
-        
-        motor_commands = (0, 0)
-        
-        if current_mode == "ball_follow":
-            # Process frame and get motor commands
-            frame, motor_commands = ball_follower.process_frame(frame)
+                ultrasonic_distance = ultrasonic_sensor.get_distance()
+                if ultrasonic_distance:
+                    cv2.putText(frame, f"Distance: {ultrasonic_distance}cm", (10, 130), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+                    if ultrasonic_distance < 10:
+                        cv2.putText(frame, "TOO CLOSE!", (10, 155), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                    elif ultrasonic_distance < 30:
+                        cv2.putText(frame, "Getting Close", (10, 155), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                else:
+                    cv2.putText(frame, "Sensor Error!", (10, 130), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            except:
+                pass
             
-            # Send motor commands
-            left_speed, right_speed = motor_commands
-            PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
+            # ================= BALL FOLLOW (ORIGINAL - NO ULTRASONIC SAFETY) =================
+            if current_mode == "ball_follow":
+                try:
+                    frame, motor_commands = ball_follower.process_frame(frame)
+                    left_speed, right_speed = motor_commands
+                    PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
+                    
+                    cv2.putText(frame, "BALL FOLLOWING MODE", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                    cv2.putText(frame, f"Motor L: {left_speed} R: {right_speed}", (10, 150), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                    cv2.rectangle(frame, (280, 200), (360, 280), (0, 255, 0), 2)
+                    cv2.line(frame, (0, 240), (640, 240), (255, 255, 0), 1)
+                except Exception as e:
+                    print(f"Ball follow error: {e}")
+                    PWM.set_motor_model(0, 0, 0, 0)
+                    
+            elif current_mode == "patrol":
+                if patrol_system.active:
+                    left_speed, right_speed = patrol_system.get_patrol_commands(0, 0, 0)
+                    PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
+                    cv2.putText(frame, "PATROL MODE", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                    cv2.putText(frame, f"State: {patrol_system.patrol_state}", (10, 50), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                    cv2.putText(frame, f"Segment: {patrol_system.current_segment + 1}/{len(patrol_system.patrol_path)}", 
+                               (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                else:
+                    cv2.putText(frame, "PATROL MODE (INACTIVE)", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                    
+            elif current_mode == "waypoint_nav":
+                if path_planner.navigation_active:
+                    left_speed, right_speed = path_planner.get_navigation_commands()
+                    PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
+                    cv2.putText(frame, "WAYPOINT NAVIGATION", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                    cv2.putText(frame, f"State: {path_planner.navigation_state}", (10, 50), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                    current_wp = path_planner.get_current_waypoint()
+                    if current_wp:
+                        cv2.putText(frame, f"Target: ({current_wp.x}, {current_wp.y})", (10, 70), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                        cv2.putText(frame, f"Distance: {path_planner.calculate_distance(current_wp):.1f}cm", 
+                                   (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                else:
+                    cv2.putText(frame, "WAYPOINT NAVIGATION (INACTIVE)", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                               
+            elif current_mode == "obstacle_avoid":
+                avoidance_cmd = path_planner.obstacle_avoidance.get_avoidance_commands()
+                if avoidance_cmd is not None:
+                    left_speed, right_speed = avoidance_cmd
+                    PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
+                cv2.putText(frame, "OBSTACLE AVOIDANCE MODE", (10, 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                obstacle_info = path_planner.obstacle_avoidance.get_visualization_info()
+                cv2.putText(frame, f"State: {obstacle_info['state']}", (10, 50), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+                if obstacle_info['obstacle']['detected']:
+                    side = obstacle_info['obstacle']['side']
+                    cv2.putText(frame, f"OBSTACLE DETECTED - {side.upper()}!", (10, 70), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                    cv2.putText(frame, f"Front: {obstacle_info['obstacle']['front_distance']:.1f}cm", 
+                               (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+                               
+            elif current_mode == "manual":
+                cv2.putText(frame, "MANUAL MODE", (10, 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                           
+            elif current_mode == "mission":
+                cv2.putText(frame, f"MISSION: {current_mission.name if current_mission else 'None'}", 
+                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
             
-            # Display motor commands on screen
-            cv2.putText(frame, f"Motor L: {left_speed} R: {right_speed}", (10, 150), 
+            # Display speed info
+            cv2.putText(frame, f"Speed Setting: {current_speed}", (10, 60), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
-            # Display mode and state
-            cv2.putText(frame, "BALL FOLLOWING MODE", (10, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            # Display mode indicator
+            mode_colors = {
+                "manual": (255, 255, 255),
+                "ball_follow": (0, 255, 0),
+                "waypoint_nav": (255, 255, 0),
+                "patrol": (255, 255, 0),
+                "obstacle_avoid": (0, 255, 255),
+                "mission": (0, 255, 255)
+            }
+            color = mode_colors.get(current_mode, (255, 255, 255))
+            cv2.rectangle(frame, (5, 5), (200, 110), color, 2)
             
-            # Draw target area in center
-            cv2.rectangle(frame, (280, 200), (360, 280), (0, 255, 0), 2)
-            cv2.putText(frame, "Target Area", (290, 195), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
-            cv2.line(frame, (0, 240), (640, 240), (255, 255, 0), 1)
+            if frame is not None and frame.size > 0:
+                ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                if ret:
+                    frame_bytes = buffer.tobytes()
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
             
-        elif current_mode == "patrol":
-            if patrol_system.active:
-                # Update car position (in real implementation, get from odometry)
-                # For now, simulate position
-                frame_counter += 1
-                if frame_counter % 30 == 0:
-                    patrol_system.current_segment = (patrol_system.current_segment + 1) % len(patrol_system.patrol_path)
-                
-                left_speed, right_speed = patrol_system.get_patrol_commands(0, 0, 0)
-                PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
-                
-                cv2.putText(frame, "PATROL MODE", (10, 30), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-                cv2.putText(frame, f"State: {patrol_system.patrol_state}", (10, 50), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-                cv2.putText(frame, f"Segment: {patrol_system.current_segment + 1}/{len(patrol_system.patrol_path)}", 
-                           (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-            else:
-                cv2.putText(frame, "PATROL MODE (INACTIVE)", (10, 30), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-                
-        elif current_mode == "waypoint_nav":
-            if path_planner.navigation_active:
-                left_speed, right_speed = path_planner.get_navigation_commands()
-                PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
-                
-                cv2.putText(frame, "WAYPOINT NAVIGATION", (10, 30), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-                cv2.putText(frame, f"State: {path_planner.navigation_state}", (10, 50), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-                
-                current_wp = path_planner.get_current_waypoint()
-                if current_wp:
-                    cv2.putText(frame, f"Target: ({current_wp.x}, {current_wp.y})", (10, 70), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-                    cv2.putText(frame, f"Distance: {path_planner.calculate_distance(current_wp):.1f}cm", 
-                               (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-            else:
-                cv2.putText(frame, "WAYPOINT NAVIGATION (INACTIVE)", (10, 30), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-                           
-        elif current_mode == "obstacle_avoid":
-            avoidance_cmd = path_planner.obstacle_avoidance.get_avoidance_commands()
-            if avoidance_cmd is not None:
-                left_speed, right_speed = avoidance_cmd
-                PWM.set_motor_model(left_speed, left_speed, right_speed, right_speed)
-            
-            cv2.putText(frame, "OBSTACLE AVOIDANCE MODE", (10, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-            
-            obstacle_info = path_planner.obstacle_avoidance.get_visualization_info()
-            cv2.putText(frame, f"State: {obstacle_info['state']}", (10, 50), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
-            
-            if obstacle_info['obstacle']['detected']:
-                side = obstacle_info['obstacle']['side']
-                cv2.putText(frame, f"OBSTACLE DETECTED - {side.upper()}!", (10, 70), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-                cv2.putText(frame, f"Front: {obstacle_info['obstacle']['front_distance']:.1f}cm", 
-                           (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-                           
-        elif current_mode == "manual":
-            cv2.putText(frame, "MANUAL MODE", (10, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                       
-        elif current_mode == "mission":
-            cv2.putText(frame, f"MISSION: {current_mission.name if current_mission else 'None'}", 
-                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-        
-        # Display speed info
-        cv2.putText(frame, f"Speed Setting: {current_speed}", (10, 60), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
-        # Display mode indicator
-        mode_colors = {
-            "manual": (255, 255, 255),
-            "ball_follow": (0, 255, 0),
-            "waypoint_nav": (255, 255, 0),
-            "patrol": (255, 255, 0),
-            "obstacle_avoid": (0, 255, 255),
-            "mission": (0, 255, 255)
-        }
-        color = mode_colors.get(current_mode, (255, 255, 255))
-        cv2.rectangle(frame, (5, 5), (200, 110), color, 2)
-        
-        # Encode and send frame
-        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-        if not ret:
+        except Exception as e:
+            print(f"Video stream error: {e}")
+            time.sleep(0.05)
             continue
-        
-        frame_bytes = buffer.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
         
         time.sleep(0.033)
 
@@ -1656,7 +1218,40 @@ def video_feed():
     return Response(generate_frames(),
                    mimetype='multipart/x-mixed-replace; boundary=frame')
                    
-# ================= Main Entry Point =================
+# ================= ULTRASONIC ROUTES =================
+@app.route("/api/ultrasonic/distance", methods=["GET"])
+def get_ultrasonic_distance():
+    """Get current ultrasonic distance reading"""
+    try:
+        distance = ultrasonic_sensor.get_distance()
+        if distance is not None:
+            return jsonify({
+                "distance": distance,
+                "status": "critical" if distance < 10 else "warning" if distance < 30 else "safe"
+            })
+        return jsonify({"distance": None, "status": "error"})
+    except:
+        return jsonify({"distance": None, "status": "error"})
+
+@app.route("/api/ultrasonic/stream")
+def ultrasonic_stream():
+    """SSE stream for real-time distance updates"""
+    def generate():
+        while True:
+            try:
+                distance = ultrasonic_sensor.get_distance()
+                data = {
+                    "distance": distance,
+                    "status": "critical" if distance and distance < 10 else "warning" if distance and distance < 30 else "safe"
+                }
+                yield f"data: {json.dumps(data)}\n\n"
+                time.sleep(0.2)
+            except:
+                time.sleep(0.5)
+                continue
+    return Response(generate(), mimetype='text/event-stream')
+                   
+# ================= MAIN ENTRY POINT =================
 if __name__ == "__main__":
     print("=" * 60)
     print("🤖 Autonomous Robot Car System with Enhanced Navigation")
@@ -1665,12 +1260,13 @@ if __name__ == "__main__":
     print("  - Main Dashboard: http://0.0.0.0:5002/")
     print("  - Manual Control: http://0.0.0.0:5002/manual")
     print("  - Calibration Tool: http://0.0.0.0:5002/calibrate")
+    print("  - AI Chat: http://0.0.0.0:5002/ai/chat")
     print("\nAvailable Modes:")
     print("  🎮 Manual Control - Drive with keyboard/mouse")
     print("  ⚽ Ball Following - Track and follow orange ball")
     print("  📍 Waypoint Navigation - Follow predefined path with obstacle avoidance")
     print("  🚓 Patrol Mission - Autonomous patrol route with collision avoidance")
-    print("  🚧 Obstacle Avoidance - Pure obstacle detection and avoidance")
+    print("  🛡️ Obstacle Avoidance - Pure obstacle detection and avoidance")
     print("  🔍 Ball Hunt Mission - Search for orange ball")
     print("\nHardware Status:")
     print(f"  📹 Camera: {'Available' if camera_available else 'Not Available'}")
@@ -1683,5 +1279,7 @@ if __name__ == "__main__":
     print("  - Waypoint navigation will avoid obstacles on the path")
     print("  - Pure obstacle avoidance mode demonstrates collision detection")
     print("  - Visit /calibrate to tune ball detection settings")
+    print("  - Visit /ai/chat for AI-powered control")
     print("=" * 60)
     app.run(host="0.0.0.0", debug=False, port=5002)
+

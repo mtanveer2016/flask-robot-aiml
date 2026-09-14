@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0d1117; color: #e6edf3; padding: 20px; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin: 10px 0; }
+        .status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; }
+        .status.online { background: #238636; color: #fff; }
+        .status.offline { background: #da3633; color: #fff; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .tool-badge { background: #21262d; padding: 4px 10px; border-radius: 16px; font-size: 12px; margin: 3px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <h1>🤖 AI Robot Dashboard</h1>
+    <div id="content">Loading...</div>
+    <script>
+        async function loadStatus() {
+            try {
+                const response = await fetch('/ai/status');
+                const data = await response.json();
+                const agent = data.agent;
+                document.getElementById('content').innerHTML = `
+                    <div class="card">
+                        <h2>Status</h2>
+                        <span class="status ${data.status === 'ready' ? 'online' : 'offline'}">${data.status}</span>
+                        <p>State: ${agent.state}</p>
+                    </div>
+                    <div class="card">
+                        <h2>Tools (${agent.tools.length})</h2>
+                        ${agent.tools.map(t => `<span class="tool-badge">🔧 ${t}</span>`).join('')}
+                    </div>
+                    <div class="card">
+                        <h2>Components</h2>
+                        <div class="grid">
+                            <div>LLM: ${agent.llm_available ? '✅' : '❌'}</div>
+                            <div>Vision: ${agent.vision_available ? '✅' : '❌'}</div>
+                            <div>Speech-to-Text: ${agent.stt_available ? '✅' : '❌'}</div>
+                            <div>Text-to-Speech: ${agent.tts_available ? '✅' : '❌'}</div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h2>History</h2>
+                        <p>Conversations: ${agent.conversation_length}</p>
+                        <p>Last Command: ${agent.last_command || 'None'}</p>
+                    </div>
+                `;
+            } catch(e) {
+                document.getElementById('content').innerHTML = `<div class="card">❌ Error loading status: ${e.message}</div>`;
+            }
+        }
+        loadStatus();
+        setInterval(loadStatus, 10000);
+    </script>
+</body>
+</html>

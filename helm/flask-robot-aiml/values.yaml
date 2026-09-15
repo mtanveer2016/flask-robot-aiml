@@ -2,8 +2,8 @@ replicaCount: 1
 
 image:
   repository: 82mtanveer/myrepo
-  tag: flask-robot-arm64-aiml
-  pullPolicy: always
+  tag: flask-robot-arm64-ai
+  pullPolicy: Always
 
 service:
   type: NodePort

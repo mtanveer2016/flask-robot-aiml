@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: flask-robot-aiml-flask-robot-aiml
+  name: flask-robot-aiml
   namespace: staging
   labels:
     app: flask-robot-aiml
@@ -24,8 +24,8 @@ spec:
         fsGroup: 0
       containers:
       - name: flask-robot-aiml
-        image: 82mtanveer/myrepo:flask-robot-arm64-final
-        imagePullPolicy: IfNotPresent
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
         - containerPort: 5002
         securityContext:

@@ -1,0 +1,8 @@
+# Ignore these
+venv/
+__pycache__/
+*.pyc
+.git/
+.env
+
+# Do NOT ignore ai_modules, ai_routes.py, templates, or app.py

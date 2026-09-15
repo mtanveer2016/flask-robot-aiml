@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: 82mtanveer/myrepo
-  tag: flask-robot-arm64-aimal
+  tag: flask-robot-arm64-aiml
   pullPolicy: always
 
 service:

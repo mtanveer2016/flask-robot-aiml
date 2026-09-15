@@ -35,3 +35,6 @@ temp/
 
 argocd-linux-arm64
 models/piper/en_US-amy-medium.onnx
+models/piper/
+models/whisper/
+models/

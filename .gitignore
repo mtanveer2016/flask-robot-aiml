@@ -34,3 +34,4 @@ temp/
 *.tmp
 
 argocd-linux-arm64
+models/piper/en_US-amy-medium.onnx

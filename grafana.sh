@@ -18,7 +18,7 @@ echo "⏳ Waiting for Grafana to be ready..."
 kubectl wait --for=condition=ready pod -n monitoring -l app.kubernetes.io/name=grafana --timeout=120s
 
 echo -e "\n✅ Fix applied!"
-echo "📊 Access Grafana: http://10.226.22.234:30272"
+echo "📊 Access Grafana: http://10.70.133.234:30272"
 echo "📊 Login: admin / prom-operator"
 echo "📊 Go to Configuration → Data Sources → Prometheus"
 echo "📊 URL should be: http://prometheus-operated:9090"

@@ -11,14 +11,14 @@ kubectl get servicemonitor -n monitoring flask-robot-monitor --show-labels
 
 # 3. Reload Prometheus
 echo "🔄 Reloading Prometheus..."
-curl -X POST "http://10.226.22.234:31691/-/reload" 2>/dev/null && echo "✅ Reloaded" || echo "⚠️ Auto-reload in 30s"
+curl -X POST "http://10.70.133.234:31691/-/reload" 2>/dev/null && echo "✅ Reloaded" || echo "⚠️ Auto-reload in 30s"
 
 # 4. Wait and check targets
 echo "⏳ Waiting 15 seconds for Prometheus to refresh..."
 sleep 15
 
 echo "📊 Checking targets..."
-curl -s "http://10.226.22.234:31691/api/v1/targets" | python3 -c "
+curl -s "http://10.70.133.234:31691/api/v1/targets" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 targets = data.get('data', {}).get('activeTargets', [])
@@ -33,4 +33,4 @@ else:
     print(f'Namespaces with targets: {namespaces}')
 "
 
-echo -e "\n📊 Check query: http://10.226.22.234:31691/graph?g0.expr=robot_battery_voltage%7Bnamespace%3D%22staging%22%7D"
+echo -e "\n📊 Check query: http://10.70.133.234:31691/graph?g0.expr=robot_battery_voltage%7Bnamespace%3D%22staging%22%7D"

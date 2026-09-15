@@ -1,6 +1,6 @@
 #!/bin/bash
-OLD_IP="10.226.22.234"
-NEW_IP="10.226.22.234"
+OLD_IP="10.70.133.234"
+NEW_IP="10.70.133.234"
 echo "Updating IP from $OLD_IP to $NEW_IP"
 # Update kubeconfig
 sudo sed -i "s/$OLD_IP/$NEW_IP/g" /etc/rancher/k3s/k3s.yaml

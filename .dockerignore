@@ -6,3 +6,21 @@ __pycache__/
 .env
 
 # Do NOT ignore ai_modules, ai_routes.py, templates, or app.py
+
+# Ignore Freenove demo files (not used)
+main.py
+server_ui.py
+server.py
+
+# Ignore venv and caches
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore git and env
+.git/
+.env
+
+# Ignore node (if any)
+node_modules/

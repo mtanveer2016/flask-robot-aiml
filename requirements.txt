@@ -1,10 +1,21 @@
-Flask==3.0.0
-flask-cors==4.0.0
-python-dotenv==1.0.0
-requests==2.31.0
-Pillow==10.2.0
-numpy==1.26.3
-opencv-python-headless==4.9.0.80
-smbus2==0.4.3
-prometheus-flask-exporter==0.23.0
-prometheus-client==0.19.0
+# Web framework
+flask
+flask-cors
+werkzeug
+
+# HTTP
+requests
+
+# Image processing
+Pillow
+opencv-python-headless
+numpy
+
+# GPIO
+gpiozero
+smbus2
+spidev
+
+# Monitoring
+prometheus-client
+prometheus-flask-exporter

@@ -1,7 +1,7 @@
 # ============================================================
 # Flask Robot AI Agent - Dockerfile
 # Base: Debian Bookworm (matches Raspberry Pi OS)
-# Supports: arm64 only
+# Supports: arm64 only (Raspberry Pi 5)
 # ============================================================
 
 FROM debian:bookworm-slim
@@ -83,7 +83,6 @@ RUN python3 -m venv --system-site-packages /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # ============ COPY LGPIO/RGPIO MODULES INTO VENV ============
-# The apt package installs to system Python; copy to venv so the venv can import them
 RUN cp /usr/lib/python3/dist-packages/lgpio.py /opt/venv/lib/python3.*/site-packages/ 2>/dev/null || true && \
     cp /usr/lib/python3/dist-packages/rgpio.py /opt/venv/lib/python3.*/site-packages/ 2>/dev/null || true && \
     cp /usr/lib/python3/dist-packages/_lgpio*.so /opt/venv/lib/python3.*/site-packages/ 2>/dev/null || true && \
@@ -92,8 +91,10 @@ RUN cp /usr/lib/python3/dist-packages/lgpio.py /opt/venv/lib/python3.*/site-pack
 # ============ INSTALL PYTHON DEPENDENCIES ============
 COPY requirements.txt .
 
+# Upgrade pip and install dependencies INCLUDING the Pi 5 beta wheel for rpi_ws281x
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir https://github.com/rpi-ws281x/rpi-ws281x-python/releases/download/pi5-beta2/rpi_ws281x-6.0.0-cp311-cp311-linux_aarch64.whl
 
 # ============ COPY APPLICATION ============
 COPY . .

@@ -1,6 +1,6 @@
 # ============================================================
 # Flask Robot AI Agent - Dockerfile
-# Base: Raspberry Pi OS (Debian bookworm-based)
+# Base: Debian Bookworm (matches Raspberry Pi OS)
 # Supports: arm64 only
 # ============================================================
 
@@ -37,18 +37,23 @@ RUN apt-get install -y --no-install-recommends \
     g++ \
     make \
     pkg-config \
+    swig \
+    unzip \
     # Python
     python3 \
     python3-pip \
     python3-dev \
     python3-setuptools \
     python3-wheel \
+    python3-venv \
     # Python libraries
     libffi-dev \
     # I2C/GPIO
     libgpiod2 \
     python3-smbus \
     i2c-tools \
+    python3-lgpio \
+    python3-rgpio \
     # Audio/Video
     ffmpeg \
     libsdl2-dev \
@@ -73,11 +78,22 @@ RUN apt-get install -y --no-install-recommends \
 # ============ SETUP WORKING DIRECTORY ============
 WORKDIR /app
 
+# ============ CREATE VIRTUAL ENVIRONMENT ============
+RUN python3 -m venv --system-site-packages /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# ============ COPY LGPIO/RGPIO MODULES INTO VENV ============
+# The apt package installs to system Python; copy to venv so the venv can import them
+RUN cp /usr/lib/python3/dist-packages/lgpio.py /opt/venv/lib/python3.*/site-packages/ 2>/dev/null || true && \
+    cp /usr/lib/python3/dist-packages/rgpio.py /opt/venv/lib/python3.*/site-packages/ 2>/dev/null || true && \
+    cp /usr/lib/python3/dist-packages/_lgpio*.so /opt/venv/lib/python3.*/site-packages/ 2>/dev/null || true && \
+    cp /usr/lib/python3/dist-packages/_rgpio*.so /opt/venv/lib/python3.*/site-packages/ 2>/dev/null || true
+
 # ============ INSTALL PYTHON DEPENDENCIES ============
 COPY requirements.txt .
 
-RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel --break-system-packages && \
-    pip3 install --no-cache-dir -r requirements.txt --break-system-packages
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
 
 # ============ COPY APPLICATION ============
 COPY . .

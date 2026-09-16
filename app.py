@@ -18,7 +18,7 @@ import random
 import ultrasonic
 import sys
 import locale
-
+from enum import Enum
 # ================= FLASK APP =================
 try:
     locale.setlocale(locale.LC_ALL, 'en_GB.UTF-8')
@@ -469,6 +469,269 @@ class ObstacleDetector:
             'left_distance': self.left_distance,
             'right_distance': self.right_distance
         }
+        
+        
+        
+# ============LED DANCE SYSTEM =================
+
+class DancePattern(Enum):
+    RAINBOW = "rainbow"
+    STROBE = "strobe"
+    BREATHING = "breathing"
+    RANDOM = "random"
+    CHASE = "chase"
+    HEARTBEAT = "heartbeat"
+    DISCO = "disco"
+
+class LEDDanceController:
+    """Controls LED dance patterns with optional music sync"""
+    
+    def __init__(self, led_instance):
+        self.led = led_instance
+        self.is_dancing = False
+        self.dance_thread = None
+        self.current_pattern = DancePattern.RAINBOW
+        self.bpm = 120  # Beats per minute
+        self.brightness = 255
+        
+        # Colors for patterns
+        self.colors = [
+            (255, 0, 0),    # Red
+            (0, 255, 0),    # Green
+            (0, 0, 255),    # Blue
+            (255, 255, 0),  # Yellow
+            (255, 0, 255),  # Magenta
+            (0, 255, 255),  # Cyan
+            (255, 255, 255) # White
+        ]
+        
+        self.current_color_index = 0
+        
+    def start_dance(self, pattern="rainbow", bpm=120, duration=None):
+        """Start LED dance with specified pattern"""
+        if self.is_dancing:
+            self.stop_dance()
+            
+        self.current_pattern = DancePattern(pattern.lower())
+        self.bpm = bpm
+        self.is_dancing = True
+        
+        self.dance_thread = threading.Thread(target=self._dance_loop, args=(duration,))
+        self.dance_thread.daemon = True
+        self.dance_thread.start()
+        
+        return True
+        
+    def stop_dance(self):
+        """Stop LED dance and turn off lights"""
+        self.is_dancing = False
+        if self.dance_thread:
+            self.dance_thread.join(timeout=0.5)
+        self.led.ledIndex(0xFF, 0, 0, 0)  # Turn off all LEDs
+        
+    def _dance_loop(self, duration=None):
+        """Main dance pattern loop"""
+        start_time = time.time()
+        
+        while self.is_dancing:
+            if duration and (time.time() - start_time) > duration:
+                break
+                
+            # Calculate delay based on BPM
+            delay = 60.0 / self.bpm
+            
+            if self.current_pattern == DancePattern.RAINBOW:
+                self._rainbow_pattern()
+            elif self.current_pattern == DancePattern.STROBE:
+                self._strobe_pattern()
+            elif self.current_pattern == DancePattern.BREATHING:
+                self._breathing_pattern()
+            elif self.current_pattern == DancePattern.RANDOM:
+                self._random_pattern()
+            elif self.current_pattern == DancePattern.CHASE:
+                self._chase_pattern()
+            elif self.current_pattern == DancePattern.HEARTBEAT:
+                self._heartbeat_pattern()
+            elif self.current_pattern == DancePattern.DISCO:
+                self._disco_pattern()
+                
+            time.sleep(delay)
+            
+        self.is_dancing = False
+        
+    def _rainbow_pattern(self):
+        """Cycle through rainbow colors"""
+        for i, color in enumerate(self.colors):
+            if not self.is_dancing:
+                break
+            brightness_factor = self.brightness / 255.0
+            r = int(color[0] * brightness_factor)
+            g = int(color[1] * brightness_factor)
+            b = int(color[2] * brightness_factor)
+            self.led.ledIndex(0xFF, r, g, b)
+            time.sleep(0.05)
+            
+    def _strobe_pattern(self):
+        """Fast flashing strobe effect"""
+        for _ in range(2):  # Double flash
+            if not self.is_dancing:
+                break
+            self.led.ledIndex(0xFF, 255, 255, 255)  # White full brightness
+            time.sleep(0.03)
+            self.led.ledIndex(0xFF, 0, 0, 0)  # Off
+            time.sleep(0.03)
+            
+    def _breathing_pattern(self):
+        """Smooth fade in and out"""
+        steps = 20
+        for i in range(steps):
+            if not self.is_dancing:
+                break
+            intensity = int((i / steps) * self.brightness)
+            self.led.ledIndex(0xFF, intensity, intensity, intensity)
+            time.sleep(0.02)
+        for i in range(steps):
+            if not self.is_dancing:
+                break
+            intensity = int(((steps - i) / steps) * self.brightness)
+            self.led.ledIndex(0xFF, intensity, intensity, intensity)
+            time.sleep(0.02)
+            
+    def _random_pattern(self):
+        """Random color flashes"""
+        random_color = random.choice(self.colors)
+        brightness_factor = self.brightness / 255.0
+        r = int(random_color[0] * brightness_factor)
+        g = int(random_color[1] * brightness_factor)
+        b = int(random_color[2] * brightness_factor)
+        self.led.ledIndex(0xFF, r, g, b)
+        
+    def _chase_pattern(self):
+        """LED chasing effect (if you have multiple LEDs)"""
+        # For single LED, simulate chase by rotating colors
+        self.current_color_index = (self.current_color_index + 1) % len(self.colors)
+        color = self.colors[self.current_color_index]
+        brightness_factor = self.brightness / 255.0
+        r = int(color[0] * brightness_factor)
+        g = int(color[1] * brightness_factor)
+        b = int(color[2] * brightness_factor)
+        self.led.ledIndex(0xFF, r, g, b)
+        
+    def _heartbeat_pattern(self):
+        """Simulate heartbeat: quick double pulse"""
+        # First beat
+        self.led.ledIndex(0xFF, 255, 0, 0)  # Red
+        time.sleep(0.1)
+        self.led.ledIndex(0xFF, 50, 0, 0)   # Dim red
+        time.sleep(0.1)
+        # Second beat
+        self.led.ledIndex(0xFF, 255, 0, 0)  # Red
+        time.sleep(0.1)
+        self.led.ledIndex(0xFF, 0, 0, 0)    # Off
+        
+    def _disco_pattern(self):
+        """Disco mode - random colors with faster timing"""
+        random_color = random.choice(self.colors)
+        brightness_factor = self.brightness / 255.0
+        r = int(random_color[0] * brightness_factor)
+        g = int(random_color[1] * brightness_factor)
+        b = int(random_color[2] * brightness_factor)
+        self.led.ledIndex(0xFF, r, g, b)
+        
+        # Sometimes add white flash
+        if random.random() < 0.3:
+            time.sleep(0.02)
+            self.led.ledIndex(0xFF, 255, 255, 255)
+            
+    def set_bpm(self, bpm):
+        """Set beats per minute for pattern timing"""
+        self.bpm = max(40, min(200, bpm))
+        
+    def set_brightness(self, brightness):
+        """Set brightness level (0-255)"""
+        self.brightness = max(0, min(255, brightness))
+
+# Initialize LED dance controller - RENAMED to avoid conflict
+led_dance_controller = LEDDanceController(led)
+
+# ================= LED DANCE ROUTES =================
+
+@app.route("/led_dance")
+def led_dance_page():
+    """LED Dance Party page"""
+    return render_template("led_dance.html")
+
+@app.route("/api/led/dance/start", methods=["POST"])
+def start_led_dance():
+    """Start LED dance with specified pattern"""
+    data = request.json
+    pattern = data.get("pattern", "rainbow")
+    bpm = data.get("bpm", 120)
+    duration = data.get("duration", None)
+    
+    # Validate pattern
+    valid_patterns = [p.value for p in DancePattern]
+    if pattern not in valid_patterns:
+        return jsonify({"success": False, "error": f"Invalid pattern. Choose from: {valid_patterns}"})
+    
+    success = led_dance_controller.start_dance(pattern, bpm, duration)
+    
+    return jsonify({
+        "success": success,
+        "pattern": pattern,
+        "bpm": bpm,
+        "duration": duration
+    })
+
+@app.route("/api/led/dance/stop", methods=["POST"])
+def stop_led_dance():
+    """Stop LED dance"""
+    led_dance_controller.stop_dance()
+    return jsonify({"success": True})
+
+@app.route("/api/led/dance/status", methods=["GET"])
+def get_led_dance_status():
+    """Get current LED dance status"""
+    return jsonify({
+        "is_dancing": led_dance_controller.is_dancing,
+        "current_pattern": led_dance_controller.current_pattern.value if led_dance_controller.current_pattern else None,
+        "bpm": led_dance_controller.bpm,
+        "brightness": led_dance_controller.brightness
+    })
+
+@app.route("/api/led/dance/patterns", methods=["GET"])
+def get_dance_patterns():
+    """Get list of available dance patterns"""
+    patterns = [{"id": p.value, "name": p.value.capitalize()} for p in DancePattern]
+    return jsonify({"patterns": patterns})
+
+@app.route("/api/led/dance/bpm/<int:bpm>", methods=["POST"])
+def set_dance_bpm(bpm):
+    """Set BPM for dance patterns"""
+    bpm = max(40, min(200, bpm))
+    led_dance_controller.set_bpm(bpm)
+    return jsonify({"success": True, "bpm": led_dance_controller.bpm})
+
+@app.route("/api/led/dance/brightness/<int:brightness>", methods=["POST"])
+def set_dance_brightness(brightness):
+    """Set brightness for LED dance"""
+    brightness = max(0, min(255, brightness))
+    led_dance_controller.set_brightness(brightness)
+    return jsonify({"success": True, "brightness": led_dance_controller.brightness})
+
+@app.route("/api/led/dance/sync-to-beats", methods=["POST"])
+def sync_to_beats():
+    """Synchronize LED dance to external beat detection"""
+    data = request.json
+    beat_detected = data.get("beat", False)
+    
+    if beat_detected and led_dance_controller.is_dancing:
+        # Flash white on beat
+        original_color = led_dance_controller.current_pattern
+        led.ledIndex(0xFF, 255, 255, 255)
+        threading.Timer(0.05, lambda: led_dance_controller.start_dance(original_color.value if original_color else "rainbow", led_dance_controller.bpm)).start()
+    
+    return jsonify({"success": True})
 
 # ================= OBSTACLE AVOIDANCE =================
 class ObstacleAvoidance:

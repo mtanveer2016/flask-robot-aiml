@@ -19,6 +19,12 @@ import ultrasonic
 import sys
 import locale
 from enum import Enum
+from prometheus_flask_exporter import PrometheusMetrics
+from prometheus_client import Gauge
+
+
+
+
 # ================= FLASK APP =================
 try:
     locale.setlocale(locale.LC_ALL, 'en_GB.UTF-8')
@@ -26,6 +32,72 @@ except locale.Error:
     pass
 
 app = Flask(__name__)
+metrics = PrometheusMetrics(app)
+
+# ================= Battery Monitoring =================
+
+# Battery metrics for Prometheus
+battery_voltage_gauge = Gauge('robot_battery_voltage', 
+                               'Current battery voltage in volts')
+battery_percent_gauge = Gauge('robot_battery_percent', 
+                               'Current battery percentage remaining')
+def get_battery_reading():
+    """Read actual battery voltage from ADC"""
+    try:
+        adc = ADC()
+        pcb_version = adc.pcb_version
+        voltage = adc.read_adc(2) * (3 if pcb_version == 1 else 2)
+        
+        # Calculate percentage for 2x18650 batteries
+        min_voltage = 6.0   # Empty
+        max_voltage = 8.4   # Fully charged
+        
+        if voltage >= max_voltage:
+            percentage = 100.0
+        elif voltage <= min_voltage:
+            percentage = 0.0
+        else:
+            percentage = ((voltage - min_voltage) / (max_voltage - min_voltage)) * 100
+        
+        return round(voltage, 2), round(percentage, 1)
+    except Exception as e:
+        print(f"Battery read error: {e}")
+        return 7.4, 50.0  # Default fallback values
+
+def update_battery_metrics():
+    """Background thread to update battery metrics"""
+    while True:
+        voltage, percentage = get_battery_reading()
+        battery_voltage_gauge.set(voltage)  # Use the gauge variable
+        battery_percent_gauge.set(percentage)  # Use the gauge variable
+        print(f"Battery updated: {voltage}V ({percentage}%)")
+        time.sleep(30)  # Update every 30 seconds
+        
+def update_battery():
+    """Simulate battery updates (replace with actual ADC reading)"""
+    voltage = 7.58
+    percentage = 65.8
+    battery_voltage_gauge.set(voltage)
+    battery_percent_gauge.set(percentage)
+    print(f"Battery: {voltage}V ({percentage}%)")
+    threading.Timer(30, update_battery).start()
+    
+# Start battery updates
+update_battery()
+
+@app.route('/health')
+def health():
+    return "Robot OK"
+
+@app.route('/metrics')
+def metrics_endpoint():
+    return metrics.expose_metrics()
+
+# Start the background thread
+battery_thread = threading.Thread(target=update_battery_metrics, daemon=True)
+battery_thread.start()
+
+
 
 # ================= ROBOT CONTROLLER CLASS =================
 class RobotController:

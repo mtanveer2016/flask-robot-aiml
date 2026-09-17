@@ -54,6 +54,14 @@ spec:
           mountPath: /dev/i2c-1
         - name: dev-mem
           mountPath: /dev/mem
+# Whisper.cpp from host
+        - name: whisper-cpp
+          mountPath: /root/whisper.cpp
+          readOnly: true
+# Piper TTS from host
+        - name: piper
+          mountPath: /app/models/piper
+          readOnly: true
       volumes:
       - name: dev-gpiomem
         hostPath:
@@ -67,3 +75,13 @@ spec:
         hostPath:
           path: /dev/mem
           type: CharDevice
+# Whisper.cpp volume
+      - name: whisper-cpp
+        hostPath:
+          path: /home/aiml/whisper.cpp
+          type: Directory
+# Piper TTS volume
+      - name: piper
+        hostPath:
+          path: /home/aiml/piper
+          type: Directory

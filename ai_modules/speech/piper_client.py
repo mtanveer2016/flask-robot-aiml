@@ -24,6 +24,10 @@ class PiperClient:
         self.piper_path = piper_path
         self.last_audio = None
         self.voice = "en_US-amy-medium"
+        
+        # Debug: print resolved paths
+        print(f"?? Piper binary: {self.piper_path}")
+        print(f"?? Piper model:  {self.model_path}")
     
     def synthesize(self, text: str, output_path: Optional[str] = None) -> bytes:
         """
@@ -92,13 +96,22 @@ class PiperClient:
         """Get available Piper voices"""
         model_dir = os.path.dirname(self.model_path)
         voices = []
-        for f in os.listdir(model_dir):
-            if f.endswith('.onnx'):
-                voices.append(f.replace('.onnx', ''))
+        if os.path.exists(model_dir):
+            for f in os.listdir(model_dir):
+                if f.endswith('.onnx'):
+                    voices.append(f.replace('.onnx', ''))
         return voices
     
-    def set_voice(self, voice: str):
-        """Change the voice model"""
+    def set_voice(self, voice: str) -> bool:
+        """
+        Change the voice model.
+        
+        Args:
+            voice: Name of the voice (e.g., 'en_US-amy-medium')
+        
+        Returns:
+            True if successful, False otherwise
+        """
         model_dir = os.path.dirname(self.model_path)
         new_path = os.path.join(model_dir, f"{voice}.onnx")
         if os.path.exists(new_path):

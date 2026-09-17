@@ -22,3 +22,18 @@ resources:
   limits:
     memory: "256Mi"
     cpu: "500m"
+
+volumeMounts:
+- name: whisper-cpp
+  mountPath: /root/whisper.cpp
+  readOnly: true
+# ... other existing mounts
+
+volumes:
+- name: whisper-cpp
+  hostPath:
+    path: /home/aiml/whisper.cpp
+    type: Directory
+
+
+

@@ -320,6 +320,40 @@ def ai_voice():
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Processing failed: {str(e)}"}), 500
+        
+        
+        
+@ai_bp.route('/voice', methods=['POST'])
+def ai_voice():
+    import time
+    t_start = time.time()
+    
+    # ... existing setup code ...
+    
+    # After WebM?WAV conversion:
+    t_wav = time.time()
+    print(f"?? WebM?WAV conversion: {t_wav - t_start:.2f}s")
+    
+    # Before Whisper
+    t_whisper_start = time.time()
+    transcription = agent.stt.transcribe_bytes(audio_bytes)
+    t_whisper_end = time.time()
+    print(f"?? Whisper transcription: {t_whisper_end - t_whisper_start:.2f}s")
+    print(f"   Transcription: {transcription}")
+    
+    # Before LLM
+    t_llm_start = time.time()
+    result = agent.process_command(transcription)
+    t_llm_end = time.time()
+    print(f"?? LLM processing: {t_llm_end - t_llm_start:.2f}s")
+    
+    # Before Piper
+    t_tts_start = time.time()
+    # ... existing Piper code ...
+    t_tts_end = time.time()
+    print(f"?? Piper TTS: {t_tts_end - t_tts_start:.2f}s")
+    
+    print(f"?? TOTAL: {t_tts_end - t_start:.2f}s")
 
 
 @ai_bp.route('/vision/describe', methods=['POST'])

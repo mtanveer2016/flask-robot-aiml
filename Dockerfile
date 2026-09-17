@@ -48,12 +48,30 @@ RUN cd /tmp && \
     ldconfig && \
     cd /tmp && rm -rf lg-master master.zip
 
+# ============ BUILD WHISPER.CPP INSIDE THE IMAGE ============
+# Compile against container's glibc to avoid GLIBC_2.38 mismatch
+# Use -j2 to avoid OOM during build
+RUN cd /tmp && \
+    git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git && \
+    cd whisper.cpp && \
+    mkdir -p build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF && \
+    make -j2 && \
+    mkdir -p /opt/whisper && \
+    cp bin/whisper-cli /opt/whisper/ && \
+    cp bin/libwhisper.so* /opt/whisper/ 2>/dev/null || true && \
+    cp bin/libggml*.so* /opt/whisper/ 2>/dev/null || true && \
+    cd /tmp && rm -rf whisper.cpp && \
+    echo "=== whisper.cpp installed ===" && \
+    ls -la /opt/whisper/
+
 # ============ WORKDIR ============
 WORKDIR /app
 
 # ============ VENV WITH SYSTEM SITE PACKAGES ============
 RUN python3 -m venv --system-site-packages /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+ENV LD_LIBRARY_PATH="/opt/whisper:/usr/local/lib"
 
 # ============ COPY SYSTEM MODULES INTO VENV ============
 RUN PYVER=$(ls /opt/venv/lib/ | grep python3) && \

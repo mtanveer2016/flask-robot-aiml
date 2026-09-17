@@ -10,16 +10,16 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOME = os.path.expanduser("~")
 
 # ================= Whisper.cpp Configuration =================
-# These paths are valid INSIDE THE POD (mounted from host)
+# Binary + libraries are baked into the image at /opt/whisper
+# Model file stays on the host mount at /root/whisper.cpp/models
 WHISPER_CONFIG = {
     "model_path": "/root/whisper.cpp/models/ggml-base.en.bin",
-    "whisper_cpp_path": "/root/whisper.cpp/build/bin/whisper-cli",
+    "whisper_cpp_path": "/opt/whisper/whisper-cli",
     "default_language": "en",
 }
 
 # ================= Piper TTS Configuration =================
-# These paths are valid INSIDE THE POD (mounted from host /home/aiml/piper)
-# Host: /home/aiml/piper/  ?  Pod: /app/models/piper/
+# Host's /home/aiml/piper is mounted at /app/models/piper
 PIPER_CONFIG = {
     "model_path": "/app/models/piper/models/en_US-amy-medium.onnx",
     "piper_path": "/app/models/piper/piper",

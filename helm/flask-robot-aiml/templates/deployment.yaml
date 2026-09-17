@@ -40,6 +40,10 @@ spec:
           value: "localhost"
         - name: LG_PORT
           value: "8889"
+# ───────── ADD THIS ─────────
+        - name: LD_LIBRARY_PATH
+          value: "/root/whisper.cpp/build/bin:/usr/local/lib"
+# ────────────────────────────
         resources:
           requests:
             memory: "128Mi"

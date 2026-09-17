@@ -40,10 +40,6 @@ spec:
           value: "localhost"
         - name: LG_PORT
           value: "8889"
-# ───────── ADD THIS ─────────
-#        - name: LD_LIBRARY_PATH
-#          value: "/root/whisper.cpp/build/bin:/usr/local/lib"
-# ────────────────────────────
         resources:
           requests:
             memory: "512Mi"
@@ -52,22 +48,22 @@ spec:
             memory: "2Gi"
             cpu: "4000m"
         volumeMounts:
+        # ============ GPIO / I2C ============
         - name: dev-gpiomem
           mountPath: /dev/gpiomem0
         - name: dev-i2c
           mountPath: /dev/i2c-1
         - name: dev-mem
           mountPath: /dev/mem
-# Whisper.cpp from host
+        # ============ WHISPER.CPP ============
         - name: whisper-cpp
           mountPath: /root/whisper.cpp
           readOnly: true
-# Piper TTS from host
+        # ============ PIPER TTS ============
         - name: piper
           mountPath: /app/models/piper
           readOnly: true
-        # ============ CAMERA ============
-        # rp1-cfe (CSI camera)
+        # ============ CAMERA - CSI (rp1-cfe) ============
         - name: dev-video0
           mountPath: /dev/video0
         - name: dev-video1
@@ -86,7 +82,7 @@ spec:
           mountPath: /dev/video7
         - name: dev-media0
           mountPath: /dev/media0
-        # pispbe (ISP backend)
+        # ============ CAMERA - ISP (pispbe) ============
         - name: dev-video20
           mountPath: /dev/video20
         - name: dev-video21
@@ -123,13 +119,23 @@ spec:
           mountPath: /dev/media1
         - name: dev-media2
           mountPath: /dev/media2
-        # rpi-hevc-dec
+        # ============ CAMERA - HEVC Decoder ============
         - name: dev-video19
           mountPath: /dev/video19
         - name: dev-media3
           mountPath: /dev/media3
-        # =======================
+        # ============ CAMERA - V4L2 Subdevices ============
+        - name: dev-v4l-subdev0
+          mountPath: /dev/v4l-subdev0
+        - name: dev-v4l-subdev1
+          mountPath: /dev/v4l-subdev1
+        - name: dev-v4l-subdev2
+          mountPath: /dev/v4l-subdev2
+        # ============ CAMERA - DMA Heap ============
+        - name: dev-dma-heap
+          mountPath: /dev/dma_heap
       volumes:
+      # ============ GPIO / I2C ============
       - name: dev-gpiomem
         hostPath:
           path: /dev/gpiomem0
@@ -142,17 +148,17 @@ spec:
         hostPath:
           path: /dev/mem
           type: CharDevice
-# Whisper.cpp volume
+      # ============ WHISPER.CPP ============
       - name: whisper-cpp
         hostPath:
           path: /home/aiml/whisper.cpp
           type: Directory
-# Piper TTS volume
+      # ============ PIPER TTS ============
       - name: piper
         hostPath:
           path: /home/aiml/piper
           type: Directory
-      # ============ CAMERA ============
+      # ============ CAMERA - CSI (rp1-cfe) ============
       - name: dev-video0
         hostPath:
           path: /dev/video0
@@ -185,10 +191,11 @@ spec:
         hostPath:
           path: /dev/video7
           type: CharDevice
-      - name: dev-video19
+      - name: dev-media0
         hostPath:
-          path: /dev/video19
+          path: /dev/media0
           type: CharDevice
+      # ============ CAMERA - ISP (pispbe) ============
       - name: dev-video20
         hostPath:
           path: /dev/video20
@@ -253,10 +260,6 @@ spec:
         hostPath:
           path: /dev/video35
           type: CharDevice
-      - name: dev-media0
-        hostPath:
-          path: /dev/media0
-          type: CharDevice
       - name: dev-media1
         hostPath:
           path: /dev/media1
@@ -265,8 +268,30 @@ spec:
         hostPath:
           path: /dev/media2
           type: CharDevice
+      # ============ CAMERA - HEVC Decoder ============
+      - name: dev-video19
+        hostPath:
+          path: /dev/video19
+          type: CharDevice
       - name: dev-media3
         hostPath:
           path: /dev/media3
           type: CharDevice
-
+      # ============ CAMERA - V4L2 Subdevices ============
+      - name: dev-v4l-subdev0
+        hostPath:
+          path: /dev/v4l-subdev0
+          type: CharDevice
+      - name: dev-v4l-subdev1
+        hostPath:
+          path: /dev/v4l-subdev1
+          type: CharDevice
+      - name: dev-v4l-subdev2
+        hostPath:
+          path: /dev/v4l-subdev2
+          type: CharDevice
+      # ============ CAMERA - DMA Heap ============
+      - name: dev-dma-heap
+        hostPath:
+          path: /dev/dma_heap
+          type: Directory

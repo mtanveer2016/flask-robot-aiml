@@ -25,9 +25,8 @@ class PiperClient:
         self.last_audio = None
         self.voice = "en_US-amy-medium"
         
-        # Debug: print resolved paths
-        print(f"?? Piper binary: {self.piper_path}")
-        print(f"?? Piper model:  {self.model_path}")
+        print(f"📢 Piper binary: {self.piper_path}")
+        print(f"📢 Piper model:  {self.model_path}")
     
     def synthesize(self, text: str, output_path: Optional[str] = None) -> bytes:
         """
@@ -41,9 +40,11 @@ class PiperClient:
             Audio bytes (WAV format)
         """
         if not os.path.exists(self.piper_path):
+            print(f"❌ Piper binary not found: {self.piper_path}")
             return b"Error: piper not found"
         
         if not os.path.exists(self.model_path):
+            print(f"❌ Piper model not found: {self.model_path}")
             return b"Error: Piper model not found"
         
         try:
@@ -52,10 +53,12 @@ class PiperClient:
                 cmd = [
                     self.piper_path,
                     "-m", self.model_path,
-                    "-f", output_path,
-                    "--output-raw"
+                    "-f", output_path
                 ]
-                subprocess.run(cmd, input=text.encode('utf-8'), capture_output=True, timeout=30)
+                result = subprocess.run(cmd, input=text.encode('utf-8'), 
+                                       capture_output=True, timeout=30)
+                if result.returncode != 0:
+                    print(f"❌ Piper error: {result.stderr.decode()}")
                 with open(output_path, 'rb') as f:
                     return f.read()
             else:
@@ -66,26 +69,38 @@ class PiperClient:
                 cmd = [
                     self.piper_path,
                     "-m", self.model_path,
-                    "-f", temp_path,
-                    "--output-raw"
+                    "-f", temp_path
                 ]
-                subprocess.run(cmd, input=text.encode('utf-8'), capture_output=True, timeout=30)
+                
+                print(f"🔊 Running Piper: {' '.join(cmd)}")
+                result = subprocess.run(cmd, input=text.encode('utf-8'), 
+                                       capture_output=True, timeout=30)
+                
+                if result.returncode != 0:
+                    print(f"❌ Piper error (rc={result.returncode}): {result.stderr.decode()}")
+                    os.unlink(temp_path)
+                    return b"Error: piper synthesis failed"
                 
                 with open(temp_path, 'rb') as f:
                     audio_bytes = f.read()
                 
                 os.unlink(temp_path)
+                print(f"✅ Piper generated {len(audio_bytes)} bytes")
                 self.last_audio = audio_bytes
                 return audio_bytes
                 
         except subprocess.TimeoutExpired:
+            print("❌ Piper timeout")
             return b"Error: Synthesis timed out"
         except Exception as e:
+            print(f"❌ Piper exception: {e}")
             return f"Error: {str(e)}".encode('utf-8')
     
     def synthesize_to_base64(self, text: str) -> str:
         """Synthesize and return as base64 for web playback"""
         audio_bytes = self.synthesize(text)
+        if not audio_bytes:
+            return ""
         return base64.b64encode(audio_bytes).decode('utf-8')
     
     def check_available(self) -> bool:
@@ -103,15 +118,7 @@ class PiperClient:
         return voices
     
     def set_voice(self, voice: str) -> bool:
-        """
-        Change the voice model.
-        
-        Args:
-            voice: Name of the voice (e.g., 'en_US-amy-medium')
-        
-        Returns:
-            True if successful, False otherwise
-        """
+        """Change the voice model"""
         model_dir = os.path.dirname(self.model_path)
         new_path = os.path.join(model_dir, f"{voice}.onnx")
         if os.path.exists(new_path):

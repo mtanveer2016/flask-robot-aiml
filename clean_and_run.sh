@@ -56,3 +56,11 @@ echo ""
 
 # restart grafana
  kubectl rollout restart deployment -n monitoring kube-prometheus-stack-grafana
+
+
+# 7. Sync and restart
+argocd app get flask-robot-aiml --hard-refresh
+argocd app sync flask-robot-aiml
+kubectl delete pod -n staging -l app=flask-robot-aiml
+
+

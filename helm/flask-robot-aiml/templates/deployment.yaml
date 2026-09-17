@@ -7,6 +7,8 @@ metadata:
     app: flask-robot-aiml
 spec:
   replicas: 1
+  strategy:
+    type: Recreate        # ? ADD THIS (two lines)
   selector:
     matchLabels:
       app: flask-robot-aiml

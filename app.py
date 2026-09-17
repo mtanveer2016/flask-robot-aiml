@@ -21,7 +21,7 @@ import locale
 from enum import Enum
 from prometheus_flask_exporter import PrometheusMetrics
 from prometheus_client import Gauge
-
+from adc import ADC
 
 
 
@@ -729,6 +729,7 @@ led_dance_controller = LEDDanceController(led)
 # ================= LED DANCE ROUTES =================
 
 @app.route("/led_dance")
+@app.route("/led-dance")
 def led_dance_page():
     """LED Dance Party page"""
     return render_template("led_dance.html")

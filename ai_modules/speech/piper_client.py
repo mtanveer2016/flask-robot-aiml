@@ -7,7 +7,6 @@ import subprocess
 import tempfile
 from typing import Optional, Dict, Any
 import base64
-import wave
 from ..config import PIPER_CONFIG
 
 
@@ -34,67 +33,84 @@ class PiperClient:
         
         Args:
             text: Text to speak
-            output_path: Optional path to save audio
+            output_path: Optional path to save audio (WAV format)
         
         Returns:
             Audio bytes (WAV format)
         """
         if not os.path.exists(self.piper_path):
             print(f"❌ Piper binary not found: {self.piper_path}")
-            return b"Error: piper not found"
+            return b""
         
         if not os.path.exists(self.model_path):
             print(f"❌ Piper model not found: {self.model_path}")
-            return b"Error: Piper model not found"
+            return b""
+        
+        # Determine output path
+        if output_path:
+            target = output_path
+            cleanup = False
+        else:
+            # Use a unique path in /tmp
+            fd, target = tempfile.mkstemp(suffix='.wav', prefix='piper_')
+            os.close(fd)  # Close the FD so Piper can write to it
+            cleanup = True
         
         try:
-            if output_path:
-                # Save to file
-                cmd = [
-                    self.piper_path,
-                    "-m", self.model_path,
-                    "-f", output_path
-                ]
-                result = subprocess.run(cmd, input=text.encode('utf-8'), 
-                                       capture_output=True, timeout=30)
-                if result.returncode != 0:
-                    print(f"❌ Piper error: {result.stderr.decode()}")
-                with open(output_path, 'rb') as f:
-                    return f.read()
-            else:
-                # Return bytes
-                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
-                    temp_path = f.name
-                
-                cmd = [
-                    self.piper_path,
-                    "-m", self.model_path,
-                    "-f", temp_path
-                ]
-                
-                print(f"🔊 Running Piper: {' '.join(cmd)}")
-                result = subprocess.run(cmd, input=text.encode('utf-8'), 
-                                       capture_output=True, timeout=30)
-                
-                if result.returncode != 0:
-                    print(f"❌ Piper error (rc={result.returncode}): {result.stderr.decode()}")
-                    os.unlink(temp_path)
-                    return b"Error: piper synthesis failed"
-                
-                with open(temp_path, 'rb') as f:
-                    audio_bytes = f.read()
-                
-                os.unlink(temp_path)
-                print(f"✅ Piper generated {len(audio_bytes)} bytes")
-                self.last_audio = audio_bytes
-                return audio_bytes
-                
+            cmd = [
+                self.piper_path,
+                "-m", self.model_path,
+                "-f", target
+            ]
+            
+            print(f"🔊 Running Piper: {' '.join(cmd)}")
+            result = subprocess.run(
+                cmd,
+                input=text.encode('utf-8'),
+                capture_output=True,
+                timeout=30
+            )
+            
+            if result.returncode != 0:
+                print(f"❌ Piper error (rc={result.returncode})")
+                print(f"   stderr: {result.stderr.decode()[:300]}")
+                print(f"   stdout: {result.stdout.decode()[:300]}")
+                return b""
+            
+            # Read the file
+            if not os.path.exists(target):
+                print(f"❌ Piper output file not created: {target}")
+                return b""
+            
+            file_size = os.path.getsize(target)
+            print(f"📁 Piper output file size: {file_size} bytes")
+            
+            if file_size == 0:
+                print("❌ Piper output file is empty")
+                print(f"   stderr: {result.stderr.decode()[:300]}")
+                return b""
+            
+            with open(target, 'rb') as f:
+                audio_bytes = f.read()
+            
+            print(f"✅ Piper generated {len(audio_bytes)} bytes (WAV header: {audio_bytes[:4]})")
+            self.last_audio = audio_bytes
+            return audio_bytes
+            
         except subprocess.TimeoutExpired:
             print("❌ Piper timeout")
-            return b"Error: Synthesis timed out"
+            return b""
         except Exception as e:
             print(f"❌ Piper exception: {e}")
-            return f"Error: {str(e)}".encode('utf-8')
+            import traceback
+            traceback.print_exc()
+            return b""
+        finally:
+            if cleanup and os.path.exists(target):
+                try:
+                    os.unlink(target)
+                except:
+                    pass
     
     def synthesize_to_base64(self, text: str) -> str:
         """Synthesize and return as base64 for web playback"""

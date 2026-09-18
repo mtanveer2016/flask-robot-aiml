@@ -30,7 +30,7 @@ PIPER_CONFIG = {
 OLLAMA_CONFIG = {
     "base_url": "http://localhost:11434",
     "llm_model": "llama3.2:3b",
-    "vision_model": "moondream",
+    "vision_model": "moondream:latest",
 }
 
 # ================= Audio Settings =================

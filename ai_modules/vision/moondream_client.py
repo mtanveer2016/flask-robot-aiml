@@ -17,7 +17,7 @@ class MoondreamClient:
     Moondream is a compact vision-language model for edge devices.
     """
     
-    def __init__(self, base_url: str = "http://localhost:11434", model: str = "moondream"):
+    def __init__(self, base_url: str = "http://localhost:11434", model: str = "moondream:latest"):
         self.base_url = base_url
         self.model = model
         self.last_image_description = ""
@@ -70,6 +70,7 @@ class MoondreamClient:
                 }
             }
             
+            print(f"📷 Sending image to {self.model}...")
             response = requests.post(
                 f"{self.base_url}/api/chat",
                 json=payload,
@@ -80,11 +81,14 @@ class MoondreamClient:
             result = response.json()
             description = result.get("message", {}).get("content", "")
             self.last_image_description = description
+            print(f"✅ Moondream response: {description[:100]}...")
             return description
             
         except requests.exceptions.Timeout:
+            print("⏱️ Moondream timeout")
             return "⏱️ Image analysis is taking too long. The model might be processing slowly on this device."
         except requests.exceptions.RequestException as e:
+            print(f"❌ Moondream error: {e}")
             return f"Error describing image: {str(e)}"
     
     def detect_object(self, image, object_name: str) -> Dict[str, Any]:
@@ -298,12 +302,22 @@ class MoondreamClient:
             return {"obstacles": [], "error": str(e)}
     
     def check_available(self) -> bool:
-        """Check if Moondream is available"""
+        """Check if Moondream is available (accepts both 'moondream' and 'moondream:latest')"""
         try:
-            response = requests.get(f"{self.base_url}/api/tags", timeout=2)
+            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
             if response.status_code == 200:
                 models = response.json().get("models", [])
-                return any(m.get("name") == self.model for m in models)
+                model_names = [m.get("name", "") for m in models]
+                # Match either "moondream" or "moondream:latest"
+                available = any(
+                    name == self.model or name.startswith(f"{self.model}:")
+                    for name in model_names
+                )
+                print(f"📋 Available models: {model_names}")
+                print(f"📋 Looking for: {self.model}")
+                print(f"📋 Moondream available: {available}")
+                return available
             return False
-        except:
+        except Exception as e:
+            print(f"⚠️ Could not check Moondream availability: {e}")
             return False

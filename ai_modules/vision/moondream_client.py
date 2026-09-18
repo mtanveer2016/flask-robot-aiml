@@ -34,7 +34,7 @@ class MoondreamClient:
             img = Image.fromarray(image)
         
         # Downscale to max 448x448 (Moondream's native resolution)
-        img.thumbnail((448, 448), Image.LANCZOS)
+        img.thumbnail((224, 224), Image.LANCZOS)
         
         buffer = io.BytesIO()
         img.save(buffer, format='JPEG', quality=75)
@@ -65,7 +65,8 @@ class MoondreamClient:
                 ],
                 "stream": False,
                 "options": {
-                    "num_predict": 256,
+                    "num_predict": 64,
+                    "num_ctx": 2048,
                     "temperature": 0.7
                 }
             }

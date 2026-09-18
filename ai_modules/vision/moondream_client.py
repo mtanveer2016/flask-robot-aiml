@@ -23,30 +23,22 @@ class MoondreamClient:
         self.last_image_description = ""
     
     def encode_image(self, image) -> str:
-        """
-        Encode image to base64 for API transmission.
-        
-        Args:
-            image: PIL Image, numpy array, or file path
-        
-        Returns:
-            base64 encoded string
-        """
+        """Encode image to base64, downscaling to save time"""
         if isinstance(image, str):
-            # File path
             with open(image, "rb") as f:
                 return base64.b64encode(f.read()).decode('utf-8')
-        elif isinstance(image, Image.Image):
-            # PIL Image
-            buffer = io.BytesIO()
-            image.save(buffer, format='JPEG')
-            return base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        if isinstance(image, Image.Image):
+            img = image
         else:
-            # Assume numpy array or similar
             img = Image.fromarray(image)
-            buffer = io.BytesIO()
-            img.save(buffer, format='JPEG')
-            return base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        # Downscale to max 448x448 (Moondream's native resolution)
+        img.thumbnail((448, 448), Image.LANCZOS)
+        
+        buffer = io.BytesIO()
+        img.save(buffer, format='JPEG', quality=75)
+        return base64.b64encode(buffer.getvalue()).decode('utf-8')
     
     def describe_image(self, image, prompt: str = "Describe what you see in this image") -> str:
         """
@@ -62,8 +54,6 @@ class MoondreamClient:
         try:
             encoded = self.encode_image(image)
             
-            # Moondream expects a specific prompt format
-            # Using Ollama's API with moondream
             payload = {
                 "model": self.model,
                 "messages": [
@@ -75,16 +65,15 @@ class MoondreamClient:
                 ],
                 "stream": False,
                 "options": {
-                    "num_predict": 256,  # Limit response length for speed
+                    "num_predict": 256,
                     "temperature": 0.7
                 }
             }
             
-            # Increase timeout to 120 seconds for Raspberry Pi
             response = requests.post(
                 f"{self.base_url}/api/chat",
                 json=payload,
-                timeout=120  # Increased from 30 to 120 seconds
+                timeout=180
             )
             response.raise_for_status()
             
@@ -112,10 +101,8 @@ class MoondreamClient:
         prompt = f"Where is the {object_name} in this image? Describe its location."
         description = self.describe_image(image, prompt)
         
-        # Parse the description for location info
         detected = object_name.lower() in description.lower()
         
-        # Extract coordinates if mentioned
         import re
         coords = re.findall(r'\((\d+)\s*,\s*(\d+)\)', description)
         
@@ -168,24 +155,15 @@ class MoondreamClient:
     def analyze_from_feed_url(self, prompt: str = "Describe what you see in this image", feed_url: str = "http://localhost:5002/video_feed") -> str:
         """
         Analyze a frame from the Flask video feed URL.
-        
-        Args:
-            prompt: Question to ask about the image
-            feed_url: URL of the video feed
-        
-        Returns:
-            Description or analysis from Moondream
         """
         try:
             from .feed_capture import capture_from_feed
             
-            # Capture from the feed URL
             print("📷 Capturing from feed URL...")
             image = capture_from_feed(feed_url, timeout=10)
             if image is None:
                 return "⚠️ Could not capture from video feed. Please make sure the server is running."
             
-            # Analyze with Moondream
             print("📷 Analyzing frame from feed with Moondream...")
             result = self.describe_image(image, prompt)
             return result
@@ -195,23 +173,15 @@ class MoondreamClient:
     def analyze_from_camera_direct(self, prompt: str = "Describe what you see in this image") -> str:
         """
         Analyze using direct camera capture as fallback.
-        
-        Args:
-            prompt: Question to ask about the image
-        
-        Returns:
-            Description or analysis from Moondream
         """
         try:
             from .feed_capture import capture_from_camera_direct
             
-            # Capture directly from camera
             print("📷 Capturing directly from camera...")
             image = capture_from_camera_direct()
             if image is None:
                 return "⚠️ Could not capture image from camera. Please make sure it's connected."
             
-            # Analyze with Moondream
             print("📷 Analyzing image with Moondream...")
             result = self.describe_image(image, prompt)
             return result
@@ -221,29 +191,20 @@ class MoondreamClient:
     def analyze_from_feed(self, prompt: str = "Describe what you see in this image") -> str:
         """
         Analyze the current frame from the video feed using OpenCV.
-        
-        Args:
-            prompt: Question to ask about the image
-        
-        Returns:
-            Description or analysis from Moondream
         """
         try:
             from .frame_capture import FrameCapture
             
-            # Use frame capture instead of camera
             print("📷 Capturing from frame capture...")
             frame_capture = FrameCapture()
             if not frame_capture.initialize():
                 return "⚠️ Could not connect to video feed. Please make sure the camera is running."
             
             try:
-                # Capture image
                 image = frame_capture.capture_as_pil()
                 if image is None:
                     return "⚠️ Could not capture frame from video feed."
                 
-                # Analyze with Moondream
                 print("📷 Analyzing frame with Moondream...")
                 result = self.describe_image(image, prompt)
                 return result
@@ -257,21 +218,12 @@ class MoondreamClient:
     def analyze_camera(self, prompt: str = "Describe what you see in this image", camera_instance=None) -> str:
         """
         Analyze the current camera feed with Moondream.
-        
-        Args:
-            prompt: Question to ask about the image
-            camera_instance: Optional shared camera instance
-        
-        Returns:
-            Description or analysis from Moondream
         """
         try:
             from .camera_capture import CameraCapture
             
-            # Use provided camera or create new one
             if camera_instance is not None:
                 camera = camera_instance
-                # Make sure it's initialized
                 if not camera.is_initialized:
                     camera.initialize()
             else:
@@ -280,19 +232,16 @@ class MoondreamClient:
                     return "⚠️ Could not initialize camera. Please make sure the camera is connected."
             
             try:
-                # Capture image
                 image = camera.capture_as_pil()
                 if image is None:
                     return "⚠️ Could not capture image. The camera might be busy or disconnected."
                 
-                # Analyze with Moondream
                 print("📷 Analyzing image with Moondream...")
                 result = self.describe_image(image, prompt)
                 return result
             except Exception as e:
                 return f"❌ Error during capture: {str(e)}"
             finally:
-                # Only release if we created the camera
                 if camera_instance is None:
                     camera.release()
         except Exception as e:
@@ -301,12 +250,6 @@ class MoondreamClient:
     def detect_object_camera(self, object_name: str) -> dict:
         """
         Detect a specific object using the camera feed.
-        
-        Args:
-            object_name: Name of object to detect
-        
-        Returns:
-            Dict with detection results
         """
         try:
             from .camera_capture import CameraCapture
@@ -329,9 +272,6 @@ class MoondreamClient:
     def analyze_obstacles(self) -> dict:
         """
         Analyze the camera feed for obstacles.
-        
-        Returns:
-            Dict with obstacle information
         """
         try:
             from .camera_capture import CameraCapture
@@ -345,7 +285,6 @@ class MoondreamClient:
                 if image is None:
                     return {"obstacles": [], "error": "Could not capture image"}
                 
-                # Ask about obstacles
                 prompt = "Describe any obstacles or objects that the robot should avoid. Include their approximate positions."
                 description = self.describe_image(image, prompt)
                 

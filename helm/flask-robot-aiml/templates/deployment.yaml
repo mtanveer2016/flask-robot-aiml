@@ -8,7 +8,7 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate        # ? ADD THIS (two lines)
+    type: Recreate
   selector:
     matchLabels:
       app: flask-robot-aiml
@@ -136,6 +136,10 @@ spec:
         # ============ CAMERA - DMA Heap ============
         - name: dev-dma-heap
           mountPath: /dev/dma_heap
+        # ============ CAMERA - UDEV (CRITICAL) ============
+        - name: run-udev
+          mountPath: /run/udev
+          readOnly: true
       volumes:
       # ============ GPIO / I2C ============
       - name: dev-gpiomem
@@ -296,4 +300,9 @@ spec:
       - name: dev-dma-heap
         hostPath:
           path: /dev/dma_heap
+          type: Directory
+      # ============ CAMERA - UDEV (CRITICAL) ============
+      - name: run-udev
+        hostPath:
+          path: /run/udev
           type: Directory

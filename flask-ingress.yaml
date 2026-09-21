@@ -1,0 +1,15 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flask-robot-aiml-ingress
+  namespace: staging
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: flask-robot-aiml-flask-robot-aiml
+      port:
+        number: 5002
+  tls:
+    - hosts:
+        - flask-robot-aiml

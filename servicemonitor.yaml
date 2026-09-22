@@ -4,12 +4,11 @@ metadata:
   name: flask-robot-monitor
   namespace: monitoring
   labels:
-    release: prometheus  # Critical - must match Prometheus config
+    release: kube-prometheus-stack  # ← CHANGED: Matches Prometheus selector
 spec:
   selector:
     matchLabels:
-      app: flask-robot
-      release: prometheus  # Match service labels
+      app: flask-robot              # ← CHANGED: Removed release: prometheus
   namespaceSelector:
     matchNames:
       - staging

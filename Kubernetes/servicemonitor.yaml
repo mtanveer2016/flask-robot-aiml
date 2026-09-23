@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: flask-robot-monitor
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: flask-robot
+  namespaceSelector:
+    matchNames:
+      - staging
+  endpoints:
+    - port: http
+      interval: 30s
+      path: /metrics

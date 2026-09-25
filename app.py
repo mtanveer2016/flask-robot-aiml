@@ -22,6 +22,7 @@ from enum import Enum
 from prometheus_flask_exporter import PrometheusMetrics
 from prometheus_client import Gauge
 from adc import ADC
+import signal
 
 
 
@@ -1089,6 +1090,19 @@ try:
 except Exception as e:
     camera_available = False
     print(f"Camera not available: {e}")
+#app release the camera on shutdown
+def cleanup(signum, frame):
+    print("Shutting down, releasing camera...")
+    try:
+        picam2.stop()
+        picam2.close()
+    except Exception as e:
+        print(f"Camera cleanup error: {e}")
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, cleanup)
+signal.signal(signal.SIGINT, cleanup)
+
 
 # ================= FLASK ROUTES =================
 @app.route("/")

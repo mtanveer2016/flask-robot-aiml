@@ -13,13 +13,13 @@ from typing import Optional, Dict, Any
 try:
     from ..config import WHISPER_CONFIG
 except ImportError:
-    # Fallback defaults
-    HOME = os.path.expanduser("~")
-    WHISPER_CONFIG = {
-        "model_path": os.path.join(HOME, "whisper.cpp/models/ggml-base.en.bin"),
-        "whisper_cpp_path": os.path.join(HOME, "whisper.cpp/build/bin/whisper-cli"),
-        "default_language": "en",
-    }
+    try:
+        from ai_modules.config import WHISPER_CONFIG
+    except ImportError:
+        import sys
+        import os
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from config import WHISPER_CONFIG
 
 
 class WhisperClient:
@@ -64,6 +64,7 @@ class WhisperClient:
         """
         # Use provided language or default
         lang = language or self.language
+        print(f"?? Whisper config: model={self.model_path} bin={self.whisper_cpp_path}")
         
         # Check if files exist
         if not os.path.exists(self.whisper_cpp_path):
@@ -83,7 +84,7 @@ class WhisperClient:
                 "-m", self.model_path,
                 "-f", audio_path,
                 "-l", lang,
-                "--no-gpu",  # Use CPU (Raspberry Pi doesn't have CUDA)
+                "-t", "4",  # Use all four pi cores
                 "-otxt"      # Output text file
             ]
             

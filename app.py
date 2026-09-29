@@ -78,7 +78,7 @@ class CameraManager:
             # Keep the encoder running so frames flow continuously.
             # Without this, capture_array() blocks on the second call.
             self._picam2.start_recording(
-                JpegEncoder(Quality=80),
+                JpegEncoder(),
                 FileOutput(_Sink(self))
             )
             time.sleep(1)

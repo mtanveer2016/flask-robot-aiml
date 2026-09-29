@@ -63,7 +63,9 @@ RUN cd /tmp && \
     cp bin/libggml*.so* /opt/whisper/ 2>/dev/null || true && \
     cd /tmp && rm -rf whisper.cpp && \
     echo "=== whisper.cpp installed ===" && \
-    ls -la /opt/whisper/
+    ls -la /opt/whisper/ && \
+    # Sanity check: binary must exist and be executable
+    test -x /opt/whisper/whisper-cli || (echo "ERROR: whisper-cli missing!" && exit 1)
 
 # ============ WORKDIR ============
 WORKDIR /app
@@ -98,6 +100,12 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
 
 # ============ COPY APP ============
 COPY . .
+
+# ============ RUNTIME DIRECTORY FOR MODELS ============
+# This is where the host will mount whisper models.
+# Creating it in the image means the mount point always exists,
+# and read-only mounts work cleanly.
+RUN mkdir -p /models /app/models/piper
 
 EXPOSE 5002
 

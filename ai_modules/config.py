@@ -14,7 +14,8 @@ HOME = os.path.expanduser("~")
 # Model file stays on the host mount at /root/whisper.cpp/models
 WHISPER_CONFIG = {
 #    "model_path": "/root/whisper.cpp/models/ggml-base.en.bin",
-    "model_path": "/root/whisper.cpp/models/ggml-tiny.en-q5_1.bin",
+#    "model_path": "/root/whisper.cpp/models/ggml-tiny.en-q5_1.bin",
+    "model_path": "/models/ggml-tiny.en-q5_1.bin",
     "whisper_cpp_path": "/opt/whisper/whisper-cli",
     "default_language": "en",
 }

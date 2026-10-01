@@ -46,7 +46,7 @@ class CameraManager:
     """
 
     def __init__(self, size=(640, 480), framerate=30):
-        from picamera2.encoders import MJpegEncoder
+        from picamera2.encoders import MJPEGEncoder
         from picamera2.outputs import FileOutput
         import io
 
@@ -78,7 +78,7 @@ class CameraManager:
             # Keep the encoder running so frames flow continuously.
             # Without this, capture_array() blocks on the second call.
             self._picam2.start_recording(
-                MJpegEncoder(),
+                MJPEGEncoder(),
                 FileOutput(_Sink(self))
             )
             time.sleep(1)

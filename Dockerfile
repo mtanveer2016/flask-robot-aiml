@@ -3,7 +3,7 @@
 # Base: Debian Bookworm (matches Raspberry Pi OS)
 # ============================================================
 
-FROM debian:bookworm-slim
+FROM debian:bookworm
 
 ARG DEBIAN_FRONTEND=noninteractive
 

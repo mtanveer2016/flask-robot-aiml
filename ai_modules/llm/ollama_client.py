@@ -22,7 +22,7 @@ class OllamaClient:
 
     def __init__(self, base_url: str = "http://localhost:11434",
                  model: str = "llama3.2:3b",
-                 keep_alive: str = "30m",
+                 keep_alive: str = "5m",
                  timeout: int = 180):
         self.base_url = base_url
         self.model = model

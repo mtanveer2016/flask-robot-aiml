@@ -20,7 +20,7 @@ class MoondreamClient:
 
     def __init__(self, base_url: str = "http://localhost:11434",
                  model: str = "moondream:latest",
-                 keep_alive: str = "30m",
+                 keep_alive: str = "5m",
                  timeout: int = 240):
         self.base_url = base_url
         self.model = model

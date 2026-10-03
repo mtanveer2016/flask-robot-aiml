@@ -345,19 +345,19 @@ print(f"   - Tools available: {ai_agent.tools.get_tool_names()}")
 
 
 # ================= WARM UP MODELS (background) =================
-def _warm_models():
-    """Preload LLM and vision model so first user request isn't slow."""
-    try:
-        time.sleep(3)  # let Flask finish booting
-        print("🔥 Warming up models in background...")
-        ai_agent.llm.warm_up()
-        if hasattr(ai_agent, 'vision') and ai_agent.vision is not None:
-            ai_agent.vision.warm_up()
-        print("✅ Model warmup complete")
-    except Exception as e:
-        print(f"⚠️ Warmup skipped: {e}")
+#def _warm_models():
+#    """Preload LLM and vision model so first user request isn't slow."""
+#    try:
+#        time.sleep(3)  # let Flask finish booting
+#        print("🔥 Warming up models in background...")
+#        ai_agent.llm.warm_up()
+#        if hasattr(ai_agent, 'vision') and ai_agent.vision is not None:
+#            ai_agent.vision.warm_up()
+#        print("✅ Model warmup complete")
+#    except Exception as e:
+#        print(f"⚠️ Warmup skipped: {e}")
 
-threading.Thread(target=_warm_models, daemon=True).start()
+#threading.Thread(target=_warm_models, daemon=True).start()
 
 
 # ================= GLOBAL STATE =================

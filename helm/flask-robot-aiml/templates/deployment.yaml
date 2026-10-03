@@ -6,7 +6,7 @@ metadata:
   labels:
     app: flask-robot-aiml
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount | default 1 }}
   strategy:
     type: Recreate
   selector:
@@ -37,18 +37,18 @@ spec:
             - ALL
         env:
         - name: ENVIRONMENT
-          value: "staging"
+          value: "{{ .Values.env.ENVIRONMENT }}"
         - name: LG_ADDR
-          value: "localhost"
+          value: "{{ .Values.env.LG_ADDR }}"
         - name: LG_PORT
-          value: "8889"
+          value: "{{ .Values.env.LG_PORT }}"
         resources:
           requests:
-            memory: "512Mi"
-            cpu: "512m"
+            memory: "{{ .Values.resources.requests.memory }}"
+            cpu: "{{ .Values.resources.requests.cpu }}"
           limits:
-            memory: "2Gi"
-            cpu: "4000m"
+            memory: "{{ .Values.resources.limits.memory }}"
+            cpu: "{{ .Values.resources.limits.cpu }}"
         volumeMounts:
         # ============ GPIO / I2C ============
         - name: dev-gpiomem
@@ -60,6 +60,9 @@ spec:
         # ============ WHISPER.CPP ============
         - name: whisper-cpp
           mountPath: /root/whisper.cpp
+          readOnly: true
+        - name: whisper-models
+          mountPath: /models
           readOnly: true
         # ============ PIPER TTS ============
         - name: piper
@@ -158,6 +161,10 @@ spec:
       - name: whisper-cpp
         hostPath:
           path: /home/aiml/whisper.cpp
+          type: Directory
+      - name: whisper-models
+        hostPath:
+          path: /home/aiml/whisper.cpp/models
           type: Directory
       # ============ PIPER TTS ============
       - name: piper

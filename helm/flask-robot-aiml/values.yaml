@@ -1,9 +1,10 @@
+
 replicaCount: 1
 
 image:
-  repository: 82mtanveer/myrepo
-  tag: flask-robot-arm64-ai
-  pullPolicy: Always
+  repository: 82mtanveer/flask-robot-ai-agent
+  tag: latest
+  pullPolicy: IfNotPresent
 
 service:
   type: NodePort
@@ -17,23 +18,8 @@ env:
 
 resources:
   requests:
-    memory: "128Mi"
-    cpu: "250m"
+    memory: "512Mi"
+    cpu: "512m"
   limits:
-    memory: "256Mi"
-    cpu: "500m"
-
-volumeMounts:
-- name: whisper-cpp
-  mountPath: /root/whisper.cpp
-  readOnly: true
-# ... other existing mounts
-
-volumes:
-- name: whisper-cpp
-  hostPath:
-    path: /home/aiml/whisper.cpp
-    type: Directory
-
-
-
+    memory: "2Gi"
+    cpu: "4000m"

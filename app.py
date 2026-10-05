@@ -40,88 +40,107 @@ metrics = PrometheusMetrics(app)
 class CameraManager:
     """
     Single shared camera instance with thread-safe access.
-    Uses start_recording + FileOutput sink so frames flow continuously
-    and both the MJPEG stream and the AI vision tool can read the latest
-    frame without ever blocking on the ISP or on each other.
+
+    Uses DIRECT capture_array() (no MJPEG encoder):
+      - Gives clean RGB frames straight from the ISP (better ball detection).
+      - 10-20x lower CPU than the encoder path.
+      - Wrapped in a worker thread so a stuck ISP can't hang the caller.
     """
 
     def __init__(self, size=(640, 480), framerate=30):
-        from picamera2.encoders import MJPEGEncoder
-        from picamera2.outputs import FileOutput
-        import io
-
         self._lock = threading.Lock()
         self._picam2 = None
         self._available = False
         self._size = size
+        self._framerate = framerate
+        self.is_initialized = False
 
-        # Rolling buffer that the encoder writes into; capture_frame() reads
-        # from it instead of calling capture_array() directly.
-        self._latest_jpeg = None
-        self._latest_lock = threading.Lock()
+        self._start()
 
-        class _Sink(io.BufferedIOBase):
-            def __init__(self, owner):
-                self._owner = owner
-            def write(self, buf):
-                with self._owner._latest_lock:
-                    self._owner._latest_jpeg = bytes(buf)
-
+    def _start(self):
         try:
             self._picam2 = Picamera2()
             config = self._picam2.create_video_configuration(
-                main={"size": size, "format": "RGB888"},
-                controls={"FrameRate": framerate}
+                main={"size": self._size, "format": "RGB888"},
+                controls={"FrameRate": self._framerate}
             )
             self._picam2.configure(config)
             self._picam2.start()
-            # Keep the encoder running so frames flow continuously.
-            # Without this, capture_array() blocks on the second call.
-            self._picam2.start_recording(
-                MJPEGEncoder(),
-                FileOutput(_Sink(self))
-            )
-            time.sleep(1)
+            time.sleep(1)  # let the sensor settle
             self._available = True
-            # Compatibility flag for MoondreamClient's hasattr() check.
             self.is_initialized = True
-            print(f"✅ CameraManager: camera initialized at {size}")
+            print(f"✅ CameraManager: camera initialized at {self._size}")
         except Exception as e:
             self._available = False
+            self.is_initialized = False
             print(f"❌ CameraManager: camera init failed: {e}")
 
     @property
     def available(self):
         return self._available
 
+    def reinit(self):
+        """Attempt to reinitialize the camera after a stuck state."""
+        print("🔄 CameraManager: attempting reinit...")
+        try:
+            if self._picam2 is not None:
+                try:
+                    self._picam2.stop()
+                except Exception:
+                    pass
+                try:
+                    self._picam2.close()
+                except Exception:
+                    pass
+            self._picam2 = None
+            self._available = False
+            self.is_initialized = False
+            time.sleep(0.5)
+            self._start()
+        except Exception as e:
+            print(f"❌ CameraManager: reinit failed: {e}")
+            self._available = False
+
     def capture_frame(self, timeout=2.0):
         """
-        Thread-safe single-frame capture.
+        Thread-safe single-frame capture with a hard timeout.
         Returns a BGR numpy array (OpenCV-compatible) or None on failure.
         """
         if not self._available:
             return None
 
-        # Wait for a fresh JPEG from the encoder
-        deadline = time.time() + timeout
-        jpeg = None
-        while time.time() < deadline:
-            with self._latest_lock:
-                jpeg = self._latest_jpeg
-            if jpeg:
-                break
-            time.sleep(0.005)
-
-        if not jpeg:
+        acquired = self._lock.acquire(timeout=timeout)
+        if not acquired:
+            print("⚠️ CameraManager: lock timeout — another capture in progress")
             return None
+
+        result = {"frame": None, "error": None}
+
+        def _grab():
+            try:
+                frame = self._picam2.capture_array()
+                result["frame"] = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            except Exception as e:
+                result["error"] = e
 
         try:
-            arr = np.frombuffer(jpeg, dtype=np.uint8)
-            frame_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-            return frame_bgr
-        except Exception as e:
-            print(f"❌ CameraManager decode error: {e}")
-            return None
+            t = threading.Thread(target=_grab, daemon=True)
+            t.start()
+            t.join(timeout=timeout)
+
+            if t.is_alive():
+                # capture_array() is stuck — mark camera as unhealthy
+                print("❌ CameraManager: capture_array timed out — camera stuck")
+                self._available = False
+                return None
+
+            if result["error"] is not None:
+                print(f"❌ CameraManager capture error: {result['error']}")
+                return None
+
+            return result["frame"]
+        finally:
+            self._lock.release()
 
     def capture_pil(self, timeout=2.0):
         """Same as capture_frame, but returns a PIL Image (RGB)."""
@@ -151,7 +170,6 @@ class CameraManager:
     def release(self):
         if self._picam2 is not None:
             try:
-                self._picam2.stop_recording()
                 self._picam2.stop()
                 self._picam2.close()
                 print("✅ CameraManager: camera released")
@@ -344,20 +362,14 @@ print(f"   - LLM: {ai_agent.llm.model}")
 print(f"   - Tools available: {ai_agent.tools.get_tool_names()}")
 
 
-# ================= WARM UP MODELS (background) =================
-#def _warm_models():
-#    """Preload LLM and vision model so first user request isn't slow."""
-#    try:
-#        time.sleep(3)  # let Flask finish booting
-#        print("🔥 Warming up models in background...")
-#        ai_agent.llm.warm_up()
-#        if hasattr(ai_agent, 'vision') and ai_agent.vision is not None:
-#            ai_agent.vision.warm_up()
-#        print("✅ Model warmup complete")
-#    except Exception as e:
-#        print(f"⚠️ Warmup skipped: {e}")
+# ================= WARM UP MODELS (DISABLED for memory) =================
+# Model warmup is disabled because the Pi 5 (8 GB) cannot hold both
+# llama3.2:3b (~2.5 GB) and moondream (~2 GB) resident alongside k3s.
+# Models load lazily on first request and unload after keep_alive expires.
+def _warm_models():
+    print("⏭️  Model warmup skipped (memory-constrained)")
 
-#threading.Thread(target=_warm_models, daemon=True).start()
+# threading.Thread(target=_warm_models, daemon=True).start()
 
 
 # ================= GLOBAL STATE =================
@@ -1446,19 +1458,20 @@ def generate_frames():
 
     while True:
         try:
+            # Auto-recover if the camera became stuck
             if not camera_manager.available:
+                camera_manager.reinit()
+                if not camera_manager.available:
+                    time.sleep(1.0)
+                    continue
+
+            # Direct capture with a small timeout — ball detection gets
+            # a clean RGB frame straight from the ISP (no JPEG round-trip).
+            frame = camera_manager.capture_frame(timeout=1.0)
+            if frame is None:
                 frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                cv2.putText(frame, "Camera Not Available", (50, 240),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                cv2.putText(frame, "Check camera connection", (50, 280),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            else:
-                # Short timeout: the encoder keeps the buffer fresh, so 100 ms is plenty.
-                frame = camera_manager.capture_frame(timeout=0.1)
-                if frame is None:
-                    frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                    cv2.putText(frame, "Camera Error", (50, 240),
-                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                cv2.putText(frame, "Camera Error", (50, 240),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
             motor_commands = (0, 0)
 

@@ -41,9 +41,10 @@ class CameraManager:
     """
     Single shared camera instance with thread-safe access.
 
-    Uses DIRECT capture_array() (no MJPEG encoder):
-      - Gives clean RGB frames straight from the ISP (better ball detection).
-      - 10-20x lower CPU than the encoder path.
+    Uses DIRECT capture_array() with format="BGR888":
+      - The Pi 5 RP1 CFE driver delivers BGR bytes for both "RGB888" and
+        "BGR888" in practice. Requesting BGR888 explicitly makes that
+        contract honest, so no channel swap is needed downstream.
       - Wrapped in a worker thread so a stuck ISP can't hang the caller.
     """
 
@@ -61,7 +62,7 @@ class CameraManager:
         try:
             self._picam2 = Picamera2()
             config = self._picam2.create_video_configuration(
-                main={"size": self._size, "format": "RGB888"},
+                main={"size": self._size, "format": "BGR888"},
                 controls={"FrameRate": self._framerate}
             )
             self._picam2.configure(config)
@@ -69,7 +70,7 @@ class CameraManager:
             time.sleep(1)  # let the sensor settle
             self._available = True
             self.is_initialized = True
-            print(f"✅ CameraManager: camera initialized at {self._size}")
+            print(f"✅ CameraManager: camera initialized at {self._size} (BGR888)")
         except Exception as e:
             self._available = False
             self.is_initialized = False
@@ -119,7 +120,10 @@ class CameraManager:
         def _grab():
             try:
                 frame = self._picam2.capture_array()
-                result["frame"] = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                # BGR888 output — already in the order OpenCV expects.
+                # No channel swap needed (previously RGB2BGR was applied
+                # here and it double-swapped to give blue balls).
+                result["frame"] = frame
             except Exception as e:
                 result["error"] = e
 
@@ -1466,7 +1470,7 @@ def generate_frames():
                     continue
 
             # Direct capture with a small timeout — ball detection gets
-            # a clean RGB frame straight from the ISP (no JPEG round-trip).
+            # a clean BGR frame straight from the ISP (no JPEG round-trip).
             frame = camera_manager.capture_frame(timeout=1.0)
             if frame is None:
                 frame = np.zeros((480, 640, 3), dtype=np.uint8)

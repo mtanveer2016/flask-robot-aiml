@@ -41,10 +41,10 @@ class CameraManager:
     """
     Single shared camera instance with thread-safe access.
 
-    Uses DIRECT capture_array() with format="BGR888":
-      - The Pi 5 RP1 CFE driver delivers BGR bytes for both "RGB888" and
-        "BGR888" in practice. Requesting BGR888 explicitly makes that
-        contract honest, so no channel swap is needed downstream.
+   Uses DIRECT capture_array() with format="RGB888":
+  - The driver delivers RGB on this Pi 5 setup, so we convert to BGR
+    for OpenCV downstream (same code that worked before the BGR888
+    experiment).
       - Wrapped in a worker thread so a stuck ISP can't hang the caller.
     """
 
@@ -62,7 +62,7 @@ class CameraManager:
         try:
             self._picam2 = Picamera2()
             config = self._picam2.create_video_configuration(
-                main={"size": self._size, "format": "BGR888"},
+                main={"size": self._size, "format": "RGB888"},
                 controls={"FrameRate": self._framerate}
             )
             self._picam2.configure(config)
@@ -120,10 +120,12 @@ class CameraManager:
         def _grab():
             try:
                 frame = self._picam2.capture_array()
-                # BGR888 output — already in the order OpenCV expects.
-                # No channel swap needed (previously RGB2BGR was applied
-                # here and it double-swapped to give blue balls).
-                result["frame"] = frame
+               
+               # Driver delivers RGB for format="RGB888" on this Pi 5 setup.
+               # Convert to BGR for OpenCV.
+               
+                result["frame"] = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                
             except Exception as e:
                 result["error"] = e
 

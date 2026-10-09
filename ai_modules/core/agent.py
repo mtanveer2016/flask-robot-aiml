@@ -52,7 +52,8 @@ class RobotAgent:
         if camera_instance is not None:
             self.camera = camera_instance
         else:
-            self.camera = CameraCapture()
+            print("⚠️ RobotAgent: no shared camera instance — vision tools disabled")
+            self.camera = None
         
         self.state = AgentState.IDLE
         self.robot_functions = {}

@@ -75,7 +75,6 @@ OLLAMA_CONFIG = {
     "llm_model": "llama3.2:3b",
     "vision_model": "moondream:latest",
 }
-}
 
 # ================= Audio Settings =================
 AUDIO_CONFIG = {

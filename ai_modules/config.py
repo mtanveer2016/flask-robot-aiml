@@ -29,10 +29,52 @@ PIPER_CONFIG = {
 }
 
 # ================= Ollama Configuration =================
+#OLLAMA_CONFIG = {
+#    "base_url": "http://localhost:11434",
+#    "llm_model": "llama3.2:3b",
+#    "vision_model": "moondream:latest",
+
+# ================= Ollama Configuration =================
+# Auto-detects which Ollama to use:
+#   1. If OLLAMA_HOST env var is set ? use that
+#   2. Try the desktop PC over Tailscale (fast) — 3-second timeout
+#   3. Fall back to the Pi's local Ollama (slow but always available)
+#
+# Set the PC's Tailscale IP below.
+PC_OLLAMA_TAILSCALE_IP = "100.116.38.102"   # <-- CHANGE THIS
+OLLAMA_PORT = 11434
+
+import socket as _socket
+
+def _detect_ollama_host():
+    import os as _os
+
+    # 1. Explicit override via env var
+    if _os.environ.get("OLLAMA_HOST"):
+        return _os.environ["OLLAMA_HOST"]
+
+    # 2. Try the PC over Tailscale
+    try:
+        s = _socket.create_connection(
+            (PC_OLLAMA_TAILSCALE_IP, OLLAMA_PORT),
+            timeout=1.0,
+        )
+        s.close()
+        print(f"? Ollama: using PC at {PC_OLLAMA_TAILSCALE_IP}")
+        return PC_OLLAMA_TAILSCALE_IP
+    except OSError:
+        pass
+
+    # 3. Fall back to local Pi
+    print("??  Ollama: PC unreachable, using local Pi")
+    return "localhost"
+
+
 OLLAMA_CONFIG = {
-    "base_url": "http://localhost:11434",
+    "base_url": f"http://{_detect_ollama_host()}:{OLLAMA_PORT}",
     "llm_model": "llama3.2:3b",
     "vision_model": "moondream:latest",
+}
 }
 
 # ================= Audio Settings =================

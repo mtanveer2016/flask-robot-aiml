@@ -57,7 +57,7 @@ def _detect_ollama_host():
     try:
         s = _socket.create_connection(
             (PC_OLLAMA_TAILSCALE_IP, OLLAMA_PORT),
-            timeout=1.0,
+            timeout=3.0,
         )
         s.close()
         print(f"? Ollama: using PC at {PC_OLLAMA_TAILSCALE_IP}")

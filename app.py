@@ -24,7 +24,7 @@ from prometheus_client import Gauge
 from adc import ADC
 import signal
 import io
-
+import requests
 
 # ================= FLASK APP =================
 try:
@@ -214,6 +214,20 @@ def get_battery_reading():
         return 7.4, 50.0
 
 
+#### helper function for django
+
+def send_battery_to_django(voltage, percentage):
+    try:
+        # Use the Kubernetes internal DNS name
+        url = "http://robot-django-api-service.staging.svc.cluster.local:8000/api/battery/"
+        payload = {"voltage": voltage, "percentage": percentage}
+        # Add a short timeout so it never blocks the robot's main loop
+        requests.post(url, json=payload, timeout=2)
+    except Exception as e:
+        print(f"⚠️ Failed to log to Django: {e}")
+
+
+
 def update_battery_metrics():
     """Background thread to update battery metrics"""
     while True:
@@ -221,17 +235,19 @@ def update_battery_metrics():
         battery_voltage_gauge.set(voltage)
         battery_percent_gauge.set(percentage)
         print(f"Battery updated: {voltage}V ({percentage}%)")
+ # --- NEW: Send to Django API ---
+        send_battery_to_django(voltage, percentage)
         time.sleep(30)
 
 
-def update_battery():
-    """Simulate battery updates (replace with actual ADC reading)"""
-    voltage = 7.58
-    percentage = 65.8
-    battery_voltage_gauge.set(voltage)
-    battery_percent_gauge.set(percentage)
-    print(f"Battery: {voltage}V ({percentage}%)")
-    threading.Timer(30, update_battery).start()
+#def update_battery():
+#    """Simulate battery updates (replace with actual ADC reading)"""
+#    voltage = 7.58
+#    percentage = 65.8
+#    battery_voltage_gauge.set(voltage)
+#    battery_percent_gauge.set(percentage)
+#    print(f"Battery: {voltage}V ({percentage}%)")
+#    threading.Timer(30, update_battery).start()
 
 
 update_battery()

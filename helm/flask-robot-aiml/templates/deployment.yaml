@@ -18,6 +18,7 @@ spec:
         app: flask-robot-aiml
     spec:
       hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet  # <-- ADD THIS LINE
       hostPID: true
       hostIPC: true
       securityContext:

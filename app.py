@@ -250,7 +250,7 @@ def update_battery_metrics():
 #    threading.Timer(30, update_battery).start()
 
 
-update_battery()
+#update_battery()
 
 
 @app.route('/health')

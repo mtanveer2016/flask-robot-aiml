@@ -20,7 +20,7 @@ import sys
 import locale
 from enum import Enum
 from prometheus_flask_exporter import PrometheusMetrics
-from prometheus_client import Gauge
+from prometheus_client import Gauge, REGISTRY
 from adc import ADC
 import signal
 import io
@@ -185,10 +185,14 @@ class CameraManager:
 
 # ================= Battery Monitoring =================
 
-battery_voltage_gauge = Gauge('robot_battery_voltage',
-                              'Current battery voltage in volts')
-battery_percent_gauge = Gauge('robot_battery_percent',
-                              'Current battery percentage remaining')
+# Wrap it like this:
+try:
+    battery_voltage_gauge = Gauge('robot_battery_voltage', 'Current battery voltage in volts')
+    battery_percent_gauge = Gauge('robot_battery_percent', 'Current battery percentage remaining')
+except ValueError:
+    # If it already exists, just fetch the existing ones
+    battery_voltage_gauge = REGISTRY._names_to_collectors['robot_battery_voltage']
+    battery_percent_gauge = REGISTRY._names_to_collectors['robot_battery_percent']
 
 
 def get_battery_reading():
@@ -222,7 +226,7 @@ def send_battery_to_django(voltage, percentage):
         url = "http://robot-django-api-service.staging.svc.cluster.local:8000/api/battery/"
         payload = {"voltage": voltage, "percentage": percentage}
         # Add a short timeout so it never blocks the robot's main loop
-        requests.post(url, json=payload, timeout=2)
+        requests.post(url, json=payload, timeout=5)
     except Exception as e:
         print(f"⚠️ Failed to log to Django: {e}")
 
@@ -230,21 +234,21 @@ def send_battery_to_django(voltage, percentage):
 def send_temperature_to_django(temp_c):
     try:
         url = "http://robot-django-api-service.staging.svc.cluster.local:8000/api/temperature/"
-        requests.post(url, json={"temperature_c": temp_c}, timeout=2)
+        requests.post(url, json={"temperature_c": temp_c}, timeout=5)
     except Exception as e:
         print(f"⚠️ Failed to log temp: {e}")
 
 def send_distance_to_django(dist_cm):
     try:
         url = "http://robot-django-api-service.staging.svc.cluster.local:8000/api/distance/"
-        requests.post(url, json={"distance_cm": dist_cm}, timeout=2)
+        requests.post(url, json={"distance_cm": dist_cm}, timeout=5)
     except Exception as e:
         print(f"⚠️ Failed to log distance: {e}")
 
 def send_vision_to_django(prompt, description):
     try:
         url = "http://robot-django-api-service.staging.svc.cluster.local:8000/api/vision/"
-        requests.post(url, json={"prompt": prompt, "description": description}, timeout=2)
+        requests.post(url, json={"prompt": prompt, "description": description}, timeout=5)
     except Exception as e:
         print(f"⚠️ Failed to log vision: {e}")
 

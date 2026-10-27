@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional, List
 from PIL import Image
 import io
 import time
+from app import send_vision_to_django
 
 
 class MoondreamClient:
@@ -94,6 +95,7 @@ class MoondreamClient:
 
             result = response.json()
             description = result.get("message", {}).get("content", "")
+            send_vision_to_django(prompt, description)
             self.last_image_description = description
             print(f"✅ Moondream response in {time.time()-t0:.1f}s: {description[:100]}...")
             return description

@@ -227,6 +227,28 @@ def send_battery_to_django(voltage, percentage):
         print(f"⚠️ Failed to log to Django: {e}")
 
 
+def send_temperature_to_django(temp_c):
+    try:
+        url = "http://robot-django-api-service.staging.svc.cluster.local:8000/api/temperature/"
+        requests.post(url, json={"temperature_c": temp_c}, timeout=2)
+    except Exception as e:
+        print(f"⚠️ Failed to log temp: {e}")
+
+def send_distance_to_django(dist_cm):
+    try:
+        url = "http://robot-django-api-service.staging.svc.cluster.local:8000/api/distance/"
+        requests.post(url, json={"distance_cm": dist_cm}, timeout=2)
+    except Exception as e:
+        print(f"⚠️ Failed to log distance: {e}")
+
+def send_vision_to_django(prompt, description):
+    try:
+        url = "http://robot-django-api-service.staging.svc.cluster.local:8000/api/vision/"
+        requests.post(url, json={"prompt": prompt, "description": description}, timeout=2)
+    except Exception as e:
+        print(f"⚠️ Failed to log vision: {e}")
+
+
 
 def update_battery_metrics():
     """Background thread to update battery metrics"""
@@ -238,6 +260,11 @@ def update_battery_metrics():
  # --- NEW: Send to Django API ---
         send_battery_to_django(voltage, percentage)
         time.sleep(30)
+
+         # Distance (Ultrasonic)
+        distance = ultrasonic_sensor.get_distance()
+        if distance is not None:
+            send_distance_to_django(distance)
 
 
 #def update_battery():
@@ -251,6 +278,8 @@ def update_battery_metrics():
 
 
 #update_battery()
+
+
 
 
 @app.route('/health')

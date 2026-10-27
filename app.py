@@ -218,6 +218,17 @@ def get_battery_reading():
         return 7.4, 50.0
 
 
+
+def get_cpu_temperature():
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+            temp_milli = float(f.read())
+            return temp_milli / 1000.0  # Convert to Celsius
+    except Exception as e:
+        print(f"Temp read error: {e}")
+        return 0.0
+
+
 #### helper function for django
 
 def send_battery_to_django(voltage, percentage):
@@ -269,6 +280,10 @@ def update_battery_metrics():
         distance = ultrasonic_sensor.get_distance()
         if distance is not None:
             send_distance_to_django(distance)
+
+        # Log CPU Temp
+        cpu_temp = get_cpu_temperature()
+        send_temperature_to_django(cpu_temp)
 
 
 #def update_battery():

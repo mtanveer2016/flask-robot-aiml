@@ -10,7 +10,6 @@ from typing import Dict, Any, Optional, List
 from PIL import Image
 import io
 import time
-from app import send_vision_to_django
 
 
 class MoondreamClient:
@@ -95,7 +94,17 @@ class MoondreamClient:
 
             result = response.json()
             description = result.get("message", {}).get("content", "")
-            send_vision_to_django(prompt, description)
+            
+            # --- FIX: Move the import inside the function to avoid circular import ---
+            try:
+                from app import send_vision_to_django
+                send_vision_to_django(prompt, description)
+            except ImportError:
+                print("⚠️ Could not import Django vision logger (circular import avoided)")
+            except Exception as e:
+                print(f"⚠️ Failed to log vision to Django: {e}")
+            # -------------------------------------------------------------------------
+
             self.last_image_description = description
             print(f"✅ Moondream response in {time.time()-t0:.1f}s: {description[:100]}...")
             return description

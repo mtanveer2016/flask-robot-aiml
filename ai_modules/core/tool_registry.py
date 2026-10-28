@@ -18,7 +18,7 @@ class ToolRegistry:
         self.tools: Dict[str, Dict[str, Any]] = {}
         self.functions: Dict[str, Callable] = {}
         self.vision = None
-        self.camera = None  # Set by init_agent() â€” a CameraManager from app.py
+        self.camera = None  # Set by init_agent() - a CameraManager from app.py
 
     def register(self, name: str, description: str, parameters: Dict[str, Any]):
         """
@@ -98,7 +98,7 @@ class ToolRegistry:
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 return Image.fromarray(rgb)
         except Exception as e:
-            print(f"âš ï¸ Shared camera capture failed: {e}")
+            print(f"⚠️ Shared camera capture failed: {e}")
         return None
 
     def _log_vision_to_django(self, prompt, description):
@@ -108,7 +108,7 @@ class ToolRegistry:
             url = "http://robot-django-api-service.staging.svc.cluster.local:8000/api/vision/"
             requests.post(url, json={"prompt": prompt, "description": description}, timeout=5)
         except Exception as e:
-            print(f"âš ï¸ Failed to log vision to Django: {e}")
+            print(f"⚠️ Failed to log vision to Django: {e}")
 
     def register_vision_tools(self):
         """Register vision-related tools for the AI agent"""
@@ -116,9 +116,15 @@ class ToolRegistry:
         # Import here to avoid circular imports
         try:
             from ..vision.moondream_client import MoondreamClient
-            self.vision = MoondreamClient()
+            from ..config import OLLAMA_CONFIG
+
+            # Pass the dynamically detected IP (PC or localhost) to Moondream
+            self.vision = MoondreamClient(
+                base_url=OLLAMA_CONFIG.get("vision_base_url", OLLAMA_CONFIG["base_url"]),
+                model=OLLAMA_CONFIG["vision_model"]
+            )
         except Exception as e:
-            print(f"âš ï¸ Vision imports failed: {e}")
+            print(f"⚠️ Vision imports failed: {e}")
             return
 
         # ============ SEE CAMERA ============
@@ -141,9 +147,9 @@ class ToolRegistry:
             try:
                 img = self._capture_image_via_shared_camera()
                 if img is not None:
-                    print("ðŸ“· Method 0 (shared manager): capturing image...")
+                    print("📷 Method 0 (shared manager): capturing image...")
                     result = self.vision.describe_image(img, prompt)
-                    if result and not result.startswith(("âš ï¸", "âŒ", "Error")):
+                    if result and not result.startswith(("⚠️", "❌", "Error")):
                         self._log_vision_to_django(prompt, result)
                         return result
                     else:
@@ -155,9 +161,9 @@ class ToolRegistry:
 
             # ===== Method 1: feed URL =====
             try:
-                print("ðŸ“· Method 1: Capturing from feed URL...")
+                print("📷 Method 1: Capturing from feed URL...")
                 result = self.vision.analyze_from_feed_url(prompt)
-                if not result.startswith(("âš ï¸", "âŒ", "Error")):
+                if not result.startswith(("⚠️", "❌", "Error")):
                     self._log_vision_to_django(prompt, result)
                     return result
             except Exception as e:
@@ -165,9 +171,9 @@ class ToolRegistry:
 
             # ===== Method 2: direct camera =====
             try:
-                print("ðŸ“· Method 2: Trying direct camera capture...")
+                print("📷 Method 2: Trying direct camera capture...")
                 result = self.vision.analyze_from_camera_direct(prompt)
-                if not result.startswith(("âš ï¸", "âŒ", "Error")):
+                if not result.startswith(("⚠️", "❌", "Error")):
                     self._log_vision_to_django(prompt, result)
                     return result
             except Exception as e:
@@ -175,15 +181,15 @@ class ToolRegistry:
 
             # ===== Method 3: saved frame =====
             try:
-                print("ðŸ“· Method 3: Trying frame capture...")
+                print("📷 Method 3: Trying frame capture...")
                 result = self.vision.analyze_from_feed(prompt)
-                if not result.startswith(("âš ï¸", "âŒ", "Error")):
+                if not result.startswith(("⚠️", "❌", "Error")):
                     self._log_vision_to_django(prompt, result)
                     return result
             except Exception as e:
                 print(f"   Method 3 failed: {e}")
 
-            return f"âš ï¸ Could not capture image. Last error: {result}"
+            return f"⚠️ Could not capture image. Last error: {result}"
 
         # ============ DETECT OBJECT ============
         @self.register(
@@ -203,34 +209,34 @@ class ToolRegistry:
                 img = self._capture_image_via_shared_camera()
                 if img is not None:
                     result = self.vision.describe_image(img, f"Where is the {object_name}?")
-                    if result and not result.startswith(("âš ï¸", "âŒ", "Error")):
+                    if result and not result.startswith(("⚠️", "❌", "Error")):
                         self._log_vision_to_django(f"Where is the {object_name}?", result)
                         if object_name.lower() in result.lower():
-                            return f"âœ… Found {object_name}: {result}"
+                            return f"✅ Found {object_name}: {result}"
                         else:
-                            return f"âŒ Could not find {object_name} in the camera view"
+                            return f"❌ Could not find {object_name} in the camera view"
 
                 # Fall back to feed URL
                 result = self.vision.analyze_from_feed_url(f"Where is the {object_name}?")
-                if result and not result.startswith(("âš ï¸", "âŒ", "Error")):
+                if result and not result.startswith(("⚠️", "❌", "Error")):
                     self._log_vision_to_django(f"Where is the {object_name}?", result)
                     if object_name.lower() in result.lower():
-                        return f"âœ… Found {object_name}: {result}"
+                        return f"✅ Found {object_name}: {result}"
                     else:
-                        return f"âŒ Could not find {object_name} in the camera view"
+                        return f"❌ Could not find {object_name} in the camera view"
 
                 # Fall back to direct camera
                 result = self.vision.analyze_from_camera_direct(f"Where is the {object_name}?")
-                if result and not result.startswith(("âš ï¸", "âŒ", "Error")):
+                if result and not result.startswith(("⚠️", "❌", "Error")):
                     self._log_vision_to_django(f"Where is the {object_name}?", result)
                     if object_name.lower() in result.lower():
-                        return f"âœ… Found {object_name}: {result}"
+                        return f"✅ Found {object_name}: {result}"
                     else:
-                        return f"âŒ Could not find {object_name} in the camera view"
+                        return f"❌ Could not find {object_name} in the camera view"
 
-                return f"âŒ Could not detect {object_name}. Error: {result}"
+                return f"❌ Could not detect {object_name}. Error: {result}"
             except Exception as e:
-                return f"âŒ Detection error: {str(e)}"
+                return f"❌ Detection error: {str(e)}"
 
         # ============ CHECK OBSTACLES ============
         @self.register(
@@ -247,33 +253,33 @@ class ToolRegistry:
                 img = self._capture_image_via_shared_camera()
                 if img is not None:
                     result = self.vision.describe_image(img, prompt)
-                    if result and not result.startswith(("âš ï¸", "âŒ", "Error")):
+                    if result and not result.startswith(("⚠️", "❌", "Error")):
                         self._log_vision_to_django(prompt, result)
                         if "obstacle" in result.lower() or "avoid" in result.lower():
-                            return f"ðŸš§ Obstacles detected: {result}"
+                            return f"🚧 Obstacles detected: {result}"
                         else:
-                            return f"âœ… No obstacles detected. {result}"
+                            return f"✅ No obstacles detected. {result}"
 
                 # Fall back
                 result = self.vision.analyze_from_feed_url(prompt)
-                if result and not result.startswith(("âš ï¸", "âŒ", "Error")):
+                if result and not result.startswith(("⚠️", "❌", "Error")):
                     self._log_vision_to_django(prompt, result)
                     if "obstacle" in result.lower() or "avoid" in result.lower():
-                        return f"ðŸš§ Obstacles detected: {result}"
+                        return f"🚧 Obstacles detected: {result}"
                     else:
-                        return f"âœ… No obstacles detected. {result}"
+                        return f"✅ No obstacles detected. {result}"
 
                 result = self.vision.analyze_from_camera_direct(prompt)
-                if result and not result.startswith(("âš ï¸", "âŒ", "Error")):
+                if result and not result.startswith(("⚠️", "❌", "Error")):
                     self._log_vision_to_django(prompt, result)
                     if "obstacle" in result.lower() or "avoid" in result.lower():
-                        return f"ðŸš§ Obstacles detected: {result}"
+                        return f"🚧 Obstacles detected: {result}"
                     else:
-                        return f"âœ… No obstacles detected. {result}"
+                        return f"✅ No obstacles detected. {result}"
 
-                return f"âš ï¸ Could not check obstacles. Error: {result}"
+                return f"⚠️ Could not check obstacles. Error: {result}"
             except Exception as e:
-                return f"âŒ Obstacle check error: {str(e)}"
+                return f"❌ Obstacle check error: {str(e)}"
 
         # ============ NAVIGATE TO OBJECT ============
         @self.register(
@@ -291,39 +297,39 @@ class ToolRegistry:
             try:
                 detect_result = detect_object(object_name)
 
-                if "âœ… Found" in detect_result:
+                if "✅ Found" in detect_result:
                     prompt = f"Where is the {object_name}? Is it on the left, right, or center?"
 
                     # Try shared camera first
                     img = self._capture_image_via_shared_camera()
                     if img is not None:
                         result = self.vision.describe_image(img, prompt)
-                        if result and not result.startswith(("âš ï¸", "âŒ", "Error")):
+                        if result and not result.startswith(("⚠️", "❌", "Error")):
                             self._log_vision_to_django(prompt, result)
                             if "left" in result.lower():
-                                return f"ðŸ”„ {object_name} is on the left. Turning left."
+                                return f"🔄 {object_name} is on the left. Turning left."
                             elif "right" in result.lower():
-                                return f"ðŸ”„ {object_name} is on the right. Turning right."
+                                return f"🔄 {object_name} is on the right. Turning right."
                             elif "center" in result.lower() or "middle" in result.lower():
-                                return f"â¬†ï¸ {object_name} is ahead! Moving forward."
+                                return f"⬆️ {object_name} is ahead! Moving forward."
                             else:
-                                return f"ðŸ“· {object_name} detected. Moving forward to find it."
+                                return f"📷 {object_name} detected. Moving forward to find it."
 
                     # Fall back to feed URL
                     result = self.vision.analyze_from_feed_url(prompt)
-                    if result and not result.startswith(("âš ï¸", "âŒ", "Error")):
+                    if result and not result.startswith(("⚠️", "❌", "Error")):
                         self._log_vision_to_django(prompt, result)
                         if "left" in result.lower():
-                            return f"ðŸ”„ {object_name} is on the left. Turning left."
+                            return f"🔄 {object_name} is on the left. Turning left."
                         elif "right" in result.lower():
-                            return f"ðŸ”„ {object_name} is on the right. Turning right."
+                            return f"🔄 {object_name} is on the right. Turning right."
                         elif "center" in result.lower() or "middle" in result.lower():
-                            return f"â¬†ï¸ {object_name} is ahead! Moving forward."
+                            return f"⬆️ {object_name} is ahead! Moving forward."
                         else:
-                            return f"ðŸ“· {object_name} detected. Moving forward to find it."
+                            return f"📷 {object_name} detected. Moving forward to find it."
 
-                    return f"ðŸ“· {object_name} detected. Moving forward to find it."
+                    return f"📷 {object_name} detected. Moving forward to find it."
                 else:
-                    return f"âŒ Could not find {object_name} in the camera view"
+                    return f"❌ Could not find {object_name} in the camera view"
             except Exception as e:
-                return f"âŒ Navigation error: {str(e)}"
+                return f"❌ Navigation error: {str(e)}"

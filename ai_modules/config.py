@@ -10,18 +10,13 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOME = os.path.expanduser("~")
 
 # ================= Whisper.cpp Configuration =================
-# Binary + libraries are baked into the image at /opt/whisper
-# Model file stays on the host mount at /root/whisper.cpp/models
 WHISPER_CONFIG = {
-#    "model_path": "/root/whisper.cpp/models/ggml-base.en.bin",
-#    "model_path": "/root/whisper.cpp/models/ggml-tiny.en-q5_1.bin",
     "model_path": "/models/ggml-tiny.en-q5_1.bin",
     "whisper_cpp_path": "/opt/whisper/whisper-cli",
     "default_language": "en",
 }
 
 # ================= Piper TTS Configuration =================
-# Host's /home/aiml/piper is mounted at /app/models/piper
 PIPER_CONFIG = {
     "model_path": "/app/models/piper/models/en_US-amy-medium.onnx",
     "piper_path": "/app/models/piper/piper",
@@ -29,19 +24,11 @@ PIPER_CONFIG = {
 }
 
 # ================= Ollama Configuration =================
-#OLLAMA_CONFIG = {
-#    "base_url": "http://localhost:11434",
-#    "llm_model": "llama3.2:3b",
-#    "vision_model": "moondream:latest",
-
-# ================= Ollama Configuration =================
 # Auto-detects which Ollama to use:
-#   1. If OLLAMA_HOST env var is set ? use that
-#   2. Try the desktop PC over Tailscale (fast) — 3-second timeout
+#   1. If OLLAMA_HOST env var is set -> use that
+#   2. Try the desktop PC over Tailscale (fast) -> 3-second timeout
 #   3. Fall back to the Pi's local Ollama (slow but always available)
-#
-# Set the PC's Tailscale IP below.
-PC_OLLAMA_TAILSCALE_IP = "100.116.38.102"   # <-- CHANGE THIS
+PC_OLLAMA_TAILSCALE_IP = "100.116.38.102"   # Your PC's Tailscale IP
 OLLAMA_PORT = 11434
 
 import socket as _socket
@@ -57,7 +44,7 @@ def _detect_ollama_host():
     try:
         s = _socket.create_connection(
             (PC_OLLAMA_TAILSCALE_IP, OLLAMA_PORT),
-            timeout=3.0,
+            timeout=10.0,
         )
         s.close()
         print(f"? Ollama: using PC at {PC_OLLAMA_TAILSCALE_IP}")
@@ -66,12 +53,16 @@ def _detect_ollama_host():
         pass
 
     # 3. Fall back to local Pi
-    print("??  Ollama: PC unreachable, using local Pi")
+    print("?? Ollama: PC unreachable, using local Pi")
     return "localhost"
 
 
+# Get the active host once at startup
+_ACTIVE_OLLAMA_HOST = _detect_ollama_host()
+
 OLLAMA_CONFIG = {
-    "base_url": f"http://{_detect_ollama_host()}:{OLLAMA_PORT}",
+    "base_url": f"http://{_ACTIVE_OLLAMA_HOST}:{OLLAMA_PORT}",
+    "vision_base_url": f"http://{_ACTIVE_OLLAMA_HOST}:{OLLAMA_PORT}", # <-- NEW
     "llm_model": "llama3.2:3b",
     "vision_model": "moondream:latest",
 }

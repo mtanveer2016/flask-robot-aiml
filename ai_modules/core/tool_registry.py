@@ -4,6 +4,7 @@ Tool Registry - Manages all robot functions that the AI can call
 
 import json
 import inspect
+import os
 from typing import Dict, Any, Callable, List, Optional
 from functools import wraps
 
@@ -118,11 +119,19 @@ class ToolRegistry:
             from ..vision.moondream_client import MoondreamClient
             from ..config import OLLAMA_CONFIG
 
-            # Pass the dynamically detected IP (PC or localhost) to Moondream
+            # Check environment variable first (set via Kubernetes for PC)
+            env_host = os.environ.get("OLLAMA_HOST")
+            
+            if env_host:
+                vision_url = f"http://{env_host}:11434"
+            else:
+                vision_url = OLLAMA_CONFIG.get("vision_base_url", OLLAMA_CONFIG["base_url"])
+
             self.vision = MoondreamClient(
-                base_url=OLLAMA_CONFIG.get("vision_base_url", OLLAMA_CONFIG["base_url"]),
+                base_url=vision_url,
                 model=OLLAMA_CONFIG["vision_model"]
             )
+            print(f"✅ Vision Client initialized pointing to: {vision_url}")
         except Exception as e:
             print(f"⚠️ Vision imports failed: {e}")
             return

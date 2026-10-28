@@ -129,7 +129,8 @@ class ToolRegistry:
 
             self.vision = MoondreamClient(
                 base_url=vision_url,
-                model=OLLAMA_CONFIG["vision_model"]
+                model=OLLAMA_CONFIG["vision_model"],
+                keep_alive=OLLAMA_CONFIG.get("keep_alive", "-1") # <-- Add this
             )
             print(f"✅ Vision Client initialized pointing to: {vision_url}")
         except Exception as e:

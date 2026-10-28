@@ -65,6 +65,7 @@ OLLAMA_CONFIG = {
     "vision_base_url": f"http://{_ACTIVE_OLLAMA_HOST}:{OLLAMA_PORT}", # <-- NEW
     "llm_model": "llama3.2:3b",
     "vision_model": "moondream:latest",
+    "keep_alive": "-1",  # <-- ADD THIS (keep in RAM forever)
 }
 
 # ================= Audio Settings =================

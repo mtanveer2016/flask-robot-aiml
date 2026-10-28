@@ -86,10 +86,13 @@ class ToolRegistry:
         if self.camera is None:
             return None
         try:
-            # Preferred: CameraManager.capture_pil() (returns RGB PIL Image)
+            # 1. Matches the alias in app.py's CameraManager
+            if hasattr(self.camera, 'capture_as_pil'):
+                return self.camera.capture_as_pil()
+            # 2. Fallback just in case
             if hasattr(self.camera, 'capture_pil'):
                 return self.camera.capture_pil()
-            # Fallback: CameraManager.capture_frame() (BGR np array)
+            # 3. Last resort: raw frame
             if hasattr(self.camera, 'capture_frame'):
                 frame = self.camera.capture_frame()
                 if frame is None:
@@ -130,7 +133,7 @@ class ToolRegistry:
             self.vision = MoondreamClient(
                 base_url=vision_url,
                 model=OLLAMA_CONFIG["vision_model"],
-                keep_alive=OLLAMA_CONFIG.get("keep_alive", -1) # <-- Now an integer
+                keep_alive=int(OLLAMA_CONFIG.get("keep_alive", -1))
             )
             print(f"✅ Vision Client initialized pointing to: {vision_url}")
         except Exception as e:

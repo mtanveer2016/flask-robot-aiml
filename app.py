@@ -25,7 +25,8 @@ from adc import ADC
 import signal
 import io
 import requests
-
+# Add a global lock to prevent threads from colliding on hardware
+hardware_lock = threading.Lock()
 # ================= FLASK APP =================
 try:
     locale.setlocale(locale.LC_ALL, 'en_GB.UTF-8')
@@ -290,24 +291,24 @@ def update_battery_metrics():
         threading.Thread(target=send_battery_to_django, args=(voltage, percentage), daemon=True).start()
 
         # --- NEW SAFETY LOGIC ---
+
         if voltage <= CRITICAL_VOLTAGE and voltage > 0:
             if not battery_critical_warning:
                 print(f"?? CRITICAL BATTERY: {voltage}V! Turning LED to RED.")
                 
-                # Turn on Red LED (Led class usually takes 0xFF, R, G, B)
-                # Adjust this line if your LED class syntax is different
-                try:
-                    led.ledIndex(0xFF, 255, 0, 0) 
-                except Exception as e:
-                    print(f"Failed to set warning LED: {e}")
-                
-                # Optional: Beep to warn you physically
-                try:
-                    buzzer.set_state(True)
-                    time.sleep(0.5)
-                    buzzer.set_state(False)
-                except:
-                    pass
+                # Use the lock so we don't interrupt the camera thread
+                with hardware_lock:
+                    try:
+                        led.ledIndex(0xFF, 255, 0, 0) 
+                    except Exception as e:
+                        print(f"Failed to set warning LED: {e}")
+                    
+                    try:
+                        buzzer.set_state(True)
+                        time.sleep(0.5)
+                        buzzer.set_state(False)
+                    except:
+                        pass
                 
                 battery_critical_warning = True
                 

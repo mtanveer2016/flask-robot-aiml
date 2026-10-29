@@ -26,7 +26,7 @@ PIPER_CONFIG = {
 # ================= Ollama Configuration =================
 # Auto-detects which Ollama to use:
 #   1. If OLLAMA_HOST env var is set -> use that
-#   2. Try the desktop PC over Tailscale (fast) -> 3-second timeout
+#   2. Try the desktop PC over Tailscale (fast) -> 10-second timeout
 #   3. Fall back to the Pi's local Ollama (slow but always available)
 PC_OLLAMA_TAILSCALE_IP = "100.116.38.102"   # Your PC's Tailscale IP
 OLLAMA_PORT = 11434
@@ -62,10 +62,10 @@ _ACTIVE_OLLAMA_HOST = _detect_ollama_host()
 
 OLLAMA_CONFIG = {
     "base_url": f"http://{_ACTIVE_OLLAMA_HOST}:{OLLAMA_PORT}",
-    "vision_base_url": f"http://{_ACTIVE_OLLAMA_HOST}:{OLLAMA_PORT}", # <-- NEW
+    "vision_base_url": f"http://{_ACTIVE_OLLAMA_HOST}:{OLLAMA_PORT}", 
     "llm_model": "llama3.2:3b",
     "vision_model": "moondream:latest",
-    "keep_alive": "-1",  # <-- ADD THIS (keep in RAM forever)
+    "keep_alive": -1,  # <-- INTEGER (-1), not string
 }
 
 # ================= Audio Settings =================

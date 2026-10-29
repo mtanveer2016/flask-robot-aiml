@@ -262,19 +262,60 @@ def send_vision_to_django(prompt, description):
         requests.post(url, json={"prompt": prompt, "description": description}, timeout=5)
     except Exception as e:
         print(f"⚠️ Failed to log vision: {e}")
+        
+################################################
 
-
+# Add this global variable to remember the state
+battery_critical_warning = False
 
 def update_battery_metrics():
-    """Background thread to update battery metrics"""
+    """Background thread to update battery metrics and check safety"""
+    global battery_critical_warning
+    
+    # Set your threshold here. 
+    # Looking at your data, 6.3V gives you about 15% warning before it dies at 5.9V.
+    CRITICAL_VOLTAGE = 6.3 
+    
     while True:
         voltage, percentage = get_battery_reading()
+        
+        # Update Prometheus metrics
         battery_voltage_gauge.set(voltage)
         battery_percent_gauge.set(percentage)
         print(f"Battery updated: {voltage}V ({percentage}%)")
- # --- NEW: Send to Django API ---
+        
+        # Send to Django
         send_battery_to_django(voltage, percentage)
+
+        # --- NEW SAFETY LOGIC ---
+        if voltage <= CRITICAL_VOLTAGE and voltage > 0:
+            if not battery_critical_warning:
+                print(f"?? CRITICAL BATTERY: {voltage}V! Turning LED to RED.")
+                
+                # Turn on Red LED (Led class usually takes 0xFF, R, G, B)
+                # Adjust this line if your LED class syntax is different
+                try:
+                    led.ledIndex(0xFF, 255, 0, 0) 
+                except Exception as e:
+                    print(f"Failed to set warning LED: {e}")
+                
+                # Optional: Beep to warn you physically
+                try:
+                    buzzer.set_state(True)
+                    time.sleep(0.5)
+                    buzzer.set_state(False)
+                except:
+                    pass
+                
+                battery_critical_warning = True
+                
+        elif voltage > (CRITICAL_VOLTAGE + 0.2) and battery_critical_warning:
+            # If voltage goes back up (battery swapped/charged), reset the warning
+            print(f"? Battery recovered ({voltage}V). Resetting warning.")
+            battery_critical_warning = False
+
         time.sleep(30)
+##################################################
 
          # Distance (Ultrasonic)
         distance = ultrasonic_sensor.get_distance()

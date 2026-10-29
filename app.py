@@ -285,7 +285,9 @@ def update_battery_metrics():
         print(f"Battery updated: {voltage}V ({percentage}%)")
         
         # Send to Django
-        send_battery_to_django(voltage, percentage)
+        #send_battery_to_django(voltage, percentage)
+        # Send to Django IN A BACKGROUND THREAD so it never blocks the sensors
+        threading.Thread(target=send_battery_to_django, args=(voltage, percentage), daemon=True).start()
 
         # --- NEW SAFETY LOGIC ---
         if voltage <= CRITICAL_VOLTAGE and voltage > 0:

@@ -152,7 +152,7 @@ class ToolRegistry:
                 }
             }
         )
-        def see_camera(prompt="Describe what you see in this image"):
+        def see_camera(prompt="Describe what you see in this image", **kwargs):
             """
             Take a photo and analyze it.
             """
@@ -215,8 +215,12 @@ class ToolRegistry:
                 }
             }
         )
-        def detect_object(object_name):
+        def detect_object(object_name=None, **kwargs):
             """Detect a specific object"""
+            # Fallback if LLM passed a weird keyword like 'w' or 'what'
+            if object_name is None:
+                object_name = kwargs.get('w') or kwargs.get('object') or kwargs.get('item') or "ball"
+                
             try:
                 # Prefer Method 0 (shared camera) too
                 img = self._capture_image_via_shared_camera()
@@ -257,7 +261,7 @@ class ToolRegistry:
             "Check the camera for obstacles in front of the robot",
             {}
         )
-        def check_obstacles():
+        def check_obstacles(**kwargs):
             """Check for obstacles using camera"""
             try:
                 prompt = "Describe any obstacles or objects that the robot should avoid."
@@ -305,8 +309,11 @@ class ToolRegistry:
                 }
             }
         )
-        def navigate_to_object(object_name):
+        def navigate_to_object(object_name=None, **kwargs):
             """Navigate towards a detected object"""
+            if object_name is None:
+                object_name = kwargs.get('w') or kwargs.get('object') or "ball"
+
             try:
                 detect_result = detect_object(object_name)
 

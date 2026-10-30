@@ -336,6 +336,7 @@ class RobotAgent:
 7. **Patrol**: Use `start_patrol` to patrol an area
 
 **IMPORTANT: Always respond with a short text message describing what you did.**
+**IMPORTANT: Do not output raw JSON. You must use the native tool calling format provided by the system.**
 For example:
 - If you called `move_forward`, respond with: "Moving the robot forward."
 - If you called `stop_robot`, respond with: "Robot stopped."
